@@ -1,6 +1,8 @@
 // adapted from https://github.com/galenballew/SDC-Lane-and-Vehicle-Detection-Tracking/blob/master/Part%20I%20-%20Simple%20Lane%20Detection/P1.ipynb
 // https://medium.com/@galen.ballew/opencv-lanedetection-419361364fc0
 
+// maybe change left or right classification based on location from middle?
+
 #include <windows.h>
 #include <iostream>
 #include <numeric>
@@ -15,7 +17,7 @@ const double pi = 3.1415926535897;
 const int FRAME_WIDTH = 640;
 const int FRAME_HEIGHT = 480;
 
-void draw_lines(Mat img, vector<Vec4i> lines, Scalar color = Scalar(255, 0, 0), int thickness = 5)
+int process_lines(Mat img, vector<Vec4i> lines, Scalar color = Scalar(255, 0, 0), int thickness = 5)
 {
 	/* workflow
 	1) examine each individual line returned by hough & determine if it's in left or right lane by its slope
@@ -29,6 +31,9 @@ void draw_lines(Mat img, vector<Vec4i> lines, Scalar color = Scalar(255, 0, 0), 
 
 	static vector<double> cache = { 0, 0, 0, 0, 0, 0, 0, 0 };
 	static bool first_frame = true;
+	static int linesCrossed = 0;
+	static double lastDistl = 0;
+	static double lastDistr = 0;
 
 	int y_global_min = img.rows;
 	int y_max = img.rows;
@@ -48,13 +53,13 @@ void draw_lines(Mat img, vector<Vec4i> lines, Scalar color = Scalar(255, 0, 0), 
 		double slope = (double(l[3]) - double(l[1])) / (double(l[2]) - double(l[0])); // (y2-y1)/(x2-x1)
 		if (slope > det_slope)
 		{
-			l_slope.push_back(slope);
-			l_lane.push_back(l);
+			r_slope.push_back(slope);
+			r_lane.push_back(l);
 		}
 		else if (slope < -det_slope)
 		{
-			r_slope.push_back(slope);
-			r_lane.push_back(l);
+			l_slope.push_back(slope);
+			l_lane.push_back(l);
 		}
 		
 		//2)
@@ -65,68 +70,87 @@ void draw_lines(Mat img, vector<Vec4i> lines, Scalar color = Scalar(255, 0, 0), 
 		
 	}
 	
-	if (l_lane.size() == 0 || r_lane.size() == 0)
+	/*if (l_lane.size() == 0 || r_lane.size() == 0)
 	{
-		return; // no lane detected
-	}
+		return -1; // no lane detected
+	}*/
 
 	//#3
 	double l_slope_mean = 0; // = 1.0 * std::accumulate(l_slope.begin(), l_slope.end(), 0LL) / l_slope.size();
 	double r_slope_mean = 0; // = 1.0 * std::accumulate(r_slope.begin(), r_slope.end(), 0LL) / r_slope.size();
 	vector<double> l_mean = { 0, 0, 0, 0 };
-	for (int i = 0; i < l_lane.size(); i++)
-	{
-		l_slope_mean += l_slope[0];
-		Vec4i l = l_lane[i];		
-		l_mean[0] += l[0];
-		l_mean[1] += l[1];
-		l_mean[2] += l[2];
-		l_mean[3] += l[3];
-	}
-
-	l_mean[0] /= l_lane.size();
-	l_mean[1] /= l_lane.size();
-	l_mean[2] /= l_lane.size();
-	l_mean[3] /= l_lane.size();
-	l_slope_mean /= l_slope.size();
-
 	vector<double> r_mean = { 0, 0, 0, 0 };
-	for (int i = 0; i < r_lane.size(); i++)
+	double l_x1 = 0;
+	double l_x2 = 0;
+	double r_x1 = 0;
+	double r_x2 = 0;
+	double l_b = 0;
+	double r_b = 0;
+	
+	if (l_lane.size() > 0)
 	{
-		r_slope_mean += r_slope[0];
-		Vec4i r = r_lane[i];
-		r_mean[0] += r[0];
-		r_mean[1] += r[1];
-		r_mean[2] += r[2];
-		r_mean[3] += r[3];
+		for (int i = 0; i < l_lane.size(); i++)
+		{
+			l_slope_mean += l_slope[0];
+			Vec4i l = l_lane[i];
+			l_mean[0] += l[0];
+			l_mean[1] += l[1];
+			l_mean[2] += l[2];
+			l_mean[3] += l[3];
+		}
+
+		l_mean[0] /= l_lane.size();
+		l_mean[1] /= l_lane.size();
+		l_mean[2] /= l_lane.size();
+		l_mean[3] /= l_lane.size();
+		l_slope_mean /= l_slope.size();
+
+		//4) y = mx + b -> b = y - mx
+		l_b = l_mean[1] - l_slope_mean * l_mean[0];
+
+		//5) using y-extrema (2), b intercept (4), and slope (3) solve for x using y = mx + b -> x = (y-b)/m
+		// these 4 points are our two lines that we will pass to the draw function
+		l_x1 = (y_global_min - l_b) / l_slope_mean;
+		l_x2 = (y_max - l_b) / l_slope_mean;
+	}
+	
+	if (r_lane.size() > 0)
+	{		
+		for (int i = 0; i < r_lane.size(); i++)
+		{
+			r_slope_mean += r_slope[0];
+			Vec4i r = r_lane[i];
+			r_mean[0] += r[0];
+			r_mean[1] += r[1];
+			r_mean[2] += r[2];
+			r_mean[3] += r[3];
+		}
+
+		r_slope_mean /= r_slope.size();
+		r_mean[0] /= r_lane.size();
+		r_mean[1] /= r_lane.size();
+		r_mean[2] /= r_lane.size();
+		r_mean[3] /= r_lane.size();
+
+		//4) y = mx + b -> b = y - mx
+		r_b = r_mean[1] - r_slope_mean * r_mean[0];
+
+		//5) using y-extrema (2), b intercept (4), and slope (3) solve for x using y = mx + b -> x = (y-b)/m
+		// these 4 points are our two lines that we will pass to the draw function
+	    r_x1 = (y_global_min - r_b) / r_slope_mean;
+		r_x2 = (y_max - r_b) / r_slope_mean;
 	}
 
-	r_slope_mean /= r_slope.size();
-	r_mean[0] /= r_lane.size();
-	r_mean[1] /= r_lane.size();
-	r_mean[2] /= r_lane.size();
-	r_mean[3] /= r_lane.size();
+	//if (r_slope_mean == 0 || l_slope_mean == 0) return -1;
 	
-
-	if (r_slope_mean == 0 || l_slope_mean == 0) return;
-
-	//4) y = mx + b -> b = y - mx
-	double l_b = l_mean[1] - l_slope_mean * l_mean[0];
-	double r_b = r_mean[1] - r_slope_mean * r_mean[0];
-
-	//5) using y-extrema (2), b intercept (4), and slope (3) solve for x using y = mx + b -> x = (y-b)/m
-	// these 4 points are our two lines that we will pass to the draw function
-	double l_x1 = (y_global_min - l_b) / l_slope_mean;
-	double l_x2 = (y_max - l_b) / l_slope_mean;
-	double r_x1 = (y_global_min - r_b) / r_slope_mean;
-	double r_x2 = (y_max - r_b) / r_slope_mean;
 	
-	double l_y1; //= 0;
-	double l_y2;//= 255;
-	double r_y1;//= 0;
-	double r_y2;//= 255;
+	double l_y1 = 0;
+	double l_y2 = 255;
+	double r_y1 = 0;
+	double r_y2 = 255;
 
 	//6
+
 	if (l_x1 > r_x1)
 	{
 		l_x1 = (l_x1 + r_x1) / 2;
@@ -147,25 +171,60 @@ void draw_lines(Mat img, vector<Vec4i> lines, Scalar color = Scalar(255, 0, 0), 
 	//vector<double> current_frame = { l_x1, l_y1, l_x2, l_y2, r_x1, r_y1, r_x2, r_y2 };
 	vector<double> current_frame = { l_x1, l_y1, l_x2, l_y2, r_x1, r_y1, r_x2, r_y2 };
 	vector<double> next_frame = { 0, 0, 0, 0, 0, 0, 0, 0 };
-	if (first_frame)
-	{
+	//if (first_frame)
+	//{
 		next_frame = current_frame;
-		first_frame = false;
-	}
+		//first_frame = false;
+	/*}
 	else
 	{
 		for (int i = 0; i < cache.size(); i++)
 		{
 			next_frame[i] = (1 - a)*cache[i] + a*current_frame[i];
 		}
-	}
+	}*/
 
-	line(img, Point(int(next_frame[0]), int(next_frame[1])), Point(int(next_frame[2]), int(next_frame[3])), Scalar(0,255,0), thickness);
-	line(img, Point(int(next_frame[4]), int(next_frame[5])), Point(int(next_frame[6]), int(next_frame[7])), Scalar(0, 255, 0), thickness);
-
-	
+	if (l_lane.size() > 0) line(img, Point(int(next_frame[0]), int(next_frame[1])), Point(int(next_frame[2]), int(next_frame[3])), Scalar(0,255,0), thickness);
+	if (r_lane.size() > 0) line(img, Point(int(next_frame[4]), int(next_frame[5])), Point(int(next_frame[6]), int(next_frame[7])), Scalar(0, 255, 0), thickness);
 
 	cache = next_frame;
+
+	// compute distance
+	double threshold = 100;
+
+	// get middle x of the screen
+	double xpoint = (double)img.cols / 2;
+	double ypoint = (double)img.rows;
+
+	double distl = threshold * 2;
+	double distr = threshold * 2;
+	if (l_lane.size() > 0)
+	{
+		double l_x = (ypoint - l_b) / l_slope_mean;
+		distl = xpoint - l_x;
+	}
+	if (r_lane.size() > 0)
+	{
+		double r_x = (ypoint - r_b) / r_slope_mean;
+		distr = r_x - xpoint;
+	}
+
+	if (lastDistl > 0 && distl < 0) {
+		linesCrossed--;
+	}
+	if (distl < threshold || linesCrossed < 0)
+	{
+		lastDistl = distl;
+		return 1;	
+	}
+	if (lastDistr > 0 && distr < 0) {
+		linesCrossed++;
+	}
+	if (distr < threshold || linesCrossed > 0) {
+		lastDistr = distr;
+		return 2;
+	}
+	return 0;
 }
 
 int main()
@@ -256,9 +315,15 @@ int main()
 		double max_line_gap = 50;
 		HoughLinesP(gauss_grey, hough_lines, rho, theta, threshold, min_line_len, max_line_gap);
 		Mat line_img(gauss_grey.rows, gauss_grey.cols, CV_8UC3, Scalar(0,0,0));
-		draw_lines(line_img, hough_lines);
+		int decision = process_lines(line_img, hough_lines);
 
 		addWeighted(line_img, 0.8, cameraFeed, 1, 0, result);
+		int font = FONT_HERSHEY_SIMPLEX;
+		string msg;
+		if (decision == 1) msg = "LEFT";
+		else if (decision == 2) msg = "RIGHT";
+		else msg = "ON TRACK";
+		putText(result, msg, Point(10, 500), font, 4, Scalar(255, 255, 255), 2, LINE_AA);
 
 		imshow("Raw", line_img);
 		imshow("Result", result);
