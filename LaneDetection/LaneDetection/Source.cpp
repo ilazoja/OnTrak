@@ -38,8 +38,8 @@ void draw_lines(Mat img, vector<Vec4i> lines, Scalar color = Scalar(255, 0, 0), 
 	vector<Vec4i> l_lane = {};
 	vector<Vec4i> r_lane = {};
 
-	double det_slope = 0.4;
-	double a = 0.2;
+	double det_slope = 1;
+	double a = 0.4;
 
 	for (int i = 0; i < lines.size(); i++)
 	{
@@ -48,13 +48,13 @@ void draw_lines(Mat img, vector<Vec4i> lines, Scalar color = Scalar(255, 0, 0), 
 		double slope = (double(l[3]) - double(l[1])) / (double(l[2]) - double(l[0])); // (y2-y1)/(x2-x1)
 		if (slope > det_slope)
 		{
-			r_slope.push_back(slope);
-			r_lane.push_back(l);
+			l_slope.push_back(slope);
+			l_lane.push_back(l);
 		}
 		else if (slope < -det_slope)
 		{
-			l_slope.push_back(slope);
-			l_lane.push_back(l);
+			r_slope.push_back(slope);
+			r_lane.push_back(l);
 		}
 		
 		//2)
@@ -71,12 +71,13 @@ void draw_lines(Mat img, vector<Vec4i> lines, Scalar color = Scalar(255, 0, 0), 
 	}
 
 	//#3
-	double l_slope_mean = 1.0 * std::accumulate(l_slope.begin(), l_slope.end(), 0LL) / l_slope.size();
-	double r_slope_mean = 1.0 * std::accumulate(r_slope.begin(), r_slope.end(), 0LL) / r_slope.size();
+	double l_slope_mean = 0; // = 1.0 * std::accumulate(l_slope.begin(), l_slope.end(), 0LL) / l_slope.size();
+	double r_slope_mean = 0; // = 1.0 * std::accumulate(r_slope.begin(), r_slope.end(), 0LL) / r_slope.size();
 	vector<double> l_mean = { 0, 0, 0, 0 };
 	for (int i = 0; i < l_lane.size(); i++)
 	{
-		Vec4i l = l_lane[i];
+		l_slope_mean += l_slope[0];
+		Vec4i l = l_lane[i];		
 		l_mean[0] += l[0];
 		l_mean[1] += l[1];
 		l_mean[2] += l[2];
@@ -87,10 +88,12 @@ void draw_lines(Mat img, vector<Vec4i> lines, Scalar color = Scalar(255, 0, 0), 
 	l_mean[1] /= l_lane.size();
 	l_mean[2] /= l_lane.size();
 	l_mean[3] /= l_lane.size();
+	l_slope_mean /= l_slope.size();
 
 	vector<double> r_mean = { 0, 0, 0, 0 };
 	for (int i = 0; i < r_lane.size(); i++)
 	{
+		r_slope_mean += r_slope[0];
 		Vec4i r = r_lane[i];
 		r_mean[0] += r[0];
 		r_mean[1] += r[1];
@@ -98,10 +101,12 @@ void draw_lines(Mat img, vector<Vec4i> lines, Scalar color = Scalar(255, 0, 0), 
 		r_mean[3] += r[3];
 	}
 
+	r_slope_mean /= r_slope.size();
 	r_mean[0] /= r_lane.size();
 	r_mean[1] /= r_lane.size();
 	r_mean[2] /= r_lane.size();
 	r_mean[3] /= r_lane.size();
+	
 
 	if (r_slope_mean == 0 || l_slope_mean == 0) return;
 
@@ -116,10 +121,10 @@ void draw_lines(Mat img, vector<Vec4i> lines, Scalar color = Scalar(255, 0, 0), 
 	double r_x1 = (y_global_min - r_b) / r_slope_mean;
 	double r_x2 = (y_max - r_b) / r_slope_mean;
 	
-	double l_y1;
-	double l_y2;
-	double r_y1;
-	double r_y2;
+	double l_y1; //= 0;
+	double l_y2;//= 255;
+	double r_y1;//= 0;
+	double r_y2;//= 255;
 
 	//6
 	if (l_x1 > r_x1)
@@ -139,6 +144,7 @@ void draw_lines(Mat img, vector<Vec4i> lines, Scalar color = Scalar(255, 0, 0), 
 		r_y2 = y_max;
 	}
 
+	//vector<double> current_frame = { l_x1, l_y1, l_x2, l_y2, r_x1, r_y1, r_x2, r_y2 };
 	vector<double> current_frame = { l_x1, l_y1, l_x2, l_y2, r_x1, r_y1, r_x2, r_y2 };
 	vector<double> next_frame = { 0, 0, 0, 0, 0, 0, 0, 0 };
 	if (first_frame)
@@ -154,10 +160,10 @@ void draw_lines(Mat img, vector<Vec4i> lines, Scalar color = Scalar(255, 0, 0), 
 		}
 	}
 
-	//line(img, Point(int(next_frame[0]), int(next_frame[1])), Point(int(next_frame[2]), int(next_frame[3])), color, thickness);
-	//line(img, Point(int(next_frame[4]), int(next_frame[5])), Point(int(next_frame[6]), int(next_frame[7])), color, thickness);
+	line(img, Point(int(next_frame[0]), int(next_frame[1])), Point(int(next_frame[2]), int(next_frame[3])), Scalar(0,255,0), thickness);
+	line(img, Point(int(next_frame[4]), int(next_frame[5])), Point(int(next_frame[6]), int(next_frame[7])), Scalar(0, 255, 0), thickness);
 
-	imshow("img", img);
+	
 
 	cache = next_frame;
 }
@@ -230,8 +236,8 @@ int main()
 		// get HSV
 		cvtColor(cameraFeed, hsvFeed, CV_BGR2HSV);
 
-		inRange(hsvFeed, Scalar(20, 100, 100), Scalar(30, 255, 255), mask_yellow); // get yellow mask (if any yellow in track)
-		inRange(greyFeed, 200, 255, mask_white); // get white mask
+		inRange(hsvFeed, Scalar(0, 0, 0), Scalar(255, 255, 255), mask_yellow); // get yellow mask (if any yellow in track)
+		inRange(greyFeed, 250, 255, mask_white); // get white mask
 		bitwise_or(mask_white, mask_yellow, mask_yw); // get white and yellow mask combined
 		bitwise_and(greyFeed, mask_yw, mask_yw_image); // get filtered image
 
@@ -254,7 +260,7 @@ int main()
 
 		addWeighted(line_img, 0.8, cameraFeed, 1, 0, result);
 
-		imshow("Raw", gauss_grey);
+		imshow("Raw", line_img);
 		imshow("Result", result);
 
 		
