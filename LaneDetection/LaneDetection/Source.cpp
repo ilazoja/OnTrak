@@ -8,6 +8,7 @@
 #include <numeric>
 #include "opencv2/imgproc.hpp"
 #include "opencv2/highgui.hpp"
+#include "Lane.hpp"
 
 using namespace std;
 using namespace cv;
@@ -43,6 +44,8 @@ int process_lines(Mat img, vector<Vec4i> lines, Scalar color = Scalar(255, 0, 0)
 	vector<Vec4i> l_lane = {};
 	vector<Vec4i> r_lane = {};
 
+	static vector<Lane> lanes = {};
+
 	double det_slope = 1;
 	double a = 0.4;
 
@@ -51,21 +54,57 @@ int process_lines(Mat img, vector<Vec4i> lines, Scalar color = Scalar(255, 0, 0)
 		//1)
 		Vec4i l = lines[i];
 		double slope = (double(l[3]) - double(l[1])) / (double(l[2]) - double(l[0])); // (y2-y1)/(x2-x1)
-		if (slope > det_slope)
-		{
-			r_slope.push_back(slope);
-			r_lane.push_back(l);
-		}
-		else if (slope < -det_slope)
-		{
-			l_slope.push_back(slope);
-			l_lane.push_back(l);
-		}
-		
-		//2)
-		y_global_min = std::min(l[3], y_global_min);
-		y_global_min = std::min(l[1], y_global_min);
+		double b = 0;
 
+		//slope = std::abs(slope);
+		//b = std::abs(b);
+		int minIndex = -1;
+		if (abs(slope) > det_slope)
+		{
+
+			// MED classifier
+			if (slope != std::numeric_limits<double>::infinity())
+			{
+				b = (double(l[1]) - slope * double(l[0])) / slope;
+				double minDist = 10000;
+				for (int j = 0; j < lanes.size(); j++)
+				{
+					Lane lane = lanes[j];
+					double lSlope = lane.getSlope();
+					double lB = lane.getB();
+					double dist = pow(slope, 2) - 2 * slope*lSlope + pow(lSlope, 2) + pow(b, 2) - 2 * b*lB + pow(lB, 2);
+					if (dist < minDist)
+					{
+						minDist = dist;
+						minIndex = j;
+					}
+				}
+			}
+			else
+			{
+				b = l[0];
+				double minDist = 100;
+				for (int j = 0; j < lanes.size(); j++)
+				{
+					Lane lane = lanes[j];
+					double lB = lane.getB();
+					double dist = abs(lB - b);
+					if (dist < minDist)
+					{
+						minDist = dist;
+						minIndex = j;
+					}
+				}
+			}
+
+
+			if (minIndex >= 0) lanes[minIndex].addLane(slope, b);
+			else
+			{
+				Lane lane = Lane(slope, b);
+				lanes.push_back(lane);
+			}
+		}
 		line(img, Point(int(l[0]), int(l[1])), Point(int(l[2]), int(l[3])), color, thickness); //enable to display all hough lines
 		
 	}
@@ -74,140 +113,41 @@ int process_lines(Mat img, vector<Vec4i> lines, Scalar color = Scalar(255, 0, 0)
 	{
 		return -1; // no lane detected
 	}*/
-
-	//#3
-	double l_slope_mean = 0; // = 1.0 * std::accumulate(l_slope.begin(), l_slope.end(), 0LL) / l_slope.size();
-	double r_slope_mean = 0; // = 1.0 * std::accumulate(r_slope.begin(), r_slope.end(), 0LL) / r_slope.size();
-	vector<double> l_mean = { 0, 0, 0, 0 };
-	vector<double> r_mean = { 0, 0, 0, 0 };
-	double l_x1 = 0;
-	double l_x2 = 0;
-	double r_x1 = 0;
-	double r_x2 = 0;
-	double l_b = 0;
-	double r_b = 0;
-	
-	if (l_lane.size() > 0)
-	{
-		for (int i = 0; i < l_lane.size(); i++)
-		{
-			l_slope_mean += l_slope[0];
-			Vec4i l = l_lane[i];
-			l_mean[0] += l[0];
-			l_mean[1] += l[1];
-			l_mean[2] += l[2];
-			l_mean[3] += l[3];
-		}
-
-		l_mean[0] /= l_lane.size();
-		l_mean[1] /= l_lane.size();
-		l_mean[2] /= l_lane.size();
-		l_mean[3] /= l_lane.size();
-		l_slope_mean /= l_slope.size();
-
-		//4) y = mx + b -> b = y - mx
-		l_b = l_mean[1] - l_slope_mean * l_mean[0];
-
-		//5) using y-extrema (2), b intercept (4), and slope (3) solve for x using y = mx + b -> x = (y-b)/m
-		// these 4 points are our two lines that we will pass to the draw function
-		l_x1 = (y_global_min - l_b) / l_slope_mean;
-		l_x2 = (y_max - l_b) / l_slope_mean;
-	}
-	
-	if (r_lane.size() > 0)
-	{		
-		for (int i = 0; i < r_lane.size(); i++)
-		{
-			r_slope_mean += r_slope[0];
-			Vec4i r = r_lane[i];
-			r_mean[0] += r[0];
-			r_mean[1] += r[1];
-			r_mean[2] += r[2];
-			r_mean[3] += r[3];
-		}
-
-		r_slope_mean /= r_slope.size();
-		r_mean[0] /= r_lane.size();
-		r_mean[1] /= r_lane.size();
-		r_mean[2] /= r_lane.size();
-		r_mean[3] /= r_lane.size();
-
-		//4) y = mx + b -> b = y - mx
-		r_b = r_mean[1] - r_slope_mean * r_mean[0];
-
-		//5) using y-extrema (2), b intercept (4), and slope (3) solve for x using y = mx + b -> x = (y-b)/m
-		// these 4 points are our two lines that we will pass to the draw function
-	    r_x1 = (y_global_min - r_b) / r_slope_mean;
-		r_x2 = (y_max - r_b) / r_slope_mean;
-	}
-
-	//if (r_slope_mean == 0 || l_slope_mean == 0) return -1;
 	
 	
-	double l_y1 = 0;
-	double l_y2 = 255;
-	double r_y1 = 0;
-	double r_y2 = 255;
-
-	//6
-
-	if (l_x1 > r_x1)
-	{
-		l_x1 = (l_x1 + r_x1) / 2;
-		r_x1 = l_x1;
-		l_y1 = (l_slope_mean * l_x1) + l_b;
-		r_y1 = (r_slope_mean * r_x1) + r_b;
-		l_y2 = (l_slope_mean * l_x2) + l_b;
-		r_y2 = (r_slope_mean * r_x2) + r_b;
-	}
-	else
-	{
-		l_y1 = y_global_min;
-		l_y2 = y_max;
-		r_y1 = y_global_min;
-		r_y2 = y_max;
-	}
-
-	//vector<double> current_frame = { l_x1, l_y1, l_x2, l_y2, r_x1, r_y1, r_x2, r_y2 };
-	vector<double> current_frame = { l_x1, l_y1, l_x2, l_y2, r_x1, r_y1, r_x2, r_y2 };
-	vector<double> next_frame = { 0, 0, 0, 0, 0, 0, 0, 0 };
-	//if (first_frame)
-	//{
-		next_frame = current_frame;
-		//first_frame = false;
-	/*}
-	else
-	{
-		for (int i = 0; i < cache.size(); i++)
-		{
-			next_frame[i] = (1 - a)*cache[i] + a*current_frame[i];
-		}
-	}*/
-
-	if (l_lane.size() > 0) line(img, Point(int(next_frame[0]), int(next_frame[1])), Point(int(next_frame[2]), int(next_frame[3])), Scalar(0,255,0), thickness);
-	if (r_lane.size() > 0) line(img, Point(int(next_frame[4]), int(next_frame[5])), Point(int(next_frame[6]), int(next_frame[7])), Scalar(0, 255, 0), thickness);
-
-	cache = next_frame;
+	double y1 = 0;
+	double y2 = img.rows;
 
 	// compute distance
-	double threshold = 100;
 
 	// get middle x of the screen
 	double xpoint = (double)img.cols / 2;
-	double ypoint = (double)img.rows;
+
+	//Lane* l_lane = NULL;
+	//Lane* r_lane = NULL;
+
+	double threshold = 100;
 
 	double distl = threshold * 2;
-	double distr = threshold * 2;
-	if (l_lane.size() > 0)
+	double distr = -threshold * 2;
+	for (int i = 0; i < lanes.size(); i++)
 	{
-		double l_x = (ypoint - l_b) / l_slope_mean;
-		distl = xpoint - l_x;
+		Lane lane = lanes[i];
+		double x1 = lane.getX(y1);
+		double x2 = lane.getX(y2);
+		line(img, Point(int(x1), int(y1)), Point(int(x2), int(y2)), Scalar(0, 255, 0), thickness);
+
+		// get distance
+		double dist = xpoint - x2;
+
+		if (dist > 0 && dist < distl) distl = dist;
+		else if (dist < 0 && dist > distr) distr = dist;
+
+
 	}
-	if (r_lane.size() > 0)
-	{
-		double r_x = (ypoint - r_b) / r_slope_mean;
-		distr = r_x - xpoint;
-	}
+	
+	//cache = next_frame;
+
 
 	if (lastDistl > 0 && distl < 0) {
 		linesCrossed--;
@@ -217,18 +157,171 @@ int process_lines(Mat img, vector<Vec4i> lines, Scalar color = Scalar(255, 0, 0)
 		lastDistl = distl;
 		return 1;	
 	}
-	if (lastDistr > 0 && distr < 0) {
+	if (lastDistr < 0 && distr > 0) {
 		linesCrossed++;
 	}
-	if (distr < threshold || linesCrossed > 0) {
+	if (distr > -threshold || linesCrossed > 0) {
 		lastDistr = distr;
 		return 2;
 	}
 	return 0;
 }
 
+// Sobel gradients - Canny edeg detection combines the sobel gradient for both x and y. By breaking it apart into its compoennts, we can produce a refined version of Canny edge detection
+Mat absSobelThresh(Mat img, char orient = 'x', int threshLow = 0, int threshHigh = 255)
+{
+	Mat grey;
+	Mat scaled_abs_sobel;
+	// Convert to grayscale
+	cvtColor(img, grey, COLOR_RGB2GRAY);
+
+	//Apply x or y gradient with the OpenCV Sobel() function and take the absolute value
+	if (orient == 'x') 
+	{
+		Mat sobel;
+		Sobel(grey, sobel, CV_64F, 1, 0);
+		convertScaleAbs(sobel, scaled_abs_sobel);
+	}
+	else if (orient == 'y')
+	{
+		Mat sobel;
+		Sobel(grey, sobel, CV_64F, 0, 1);
+		convertScaleAbs(sobel, scaled_abs_sobel); // gets abs and rescale to 8 uint
+	}
+
+	// apply the threshold
+	Mat binary_output;
+	inRange(scaled_abs_sobel, threshLow, threshHigh, binary_output);
+	return binary_output;
+
+}
+
+// Gradient magnitude - This function will filter based on min/max magnitude for the gradient. This function looks at the combined xy gradient
+// but also could be altered to filter on the magnitude in a single direction, or some linear combination of the two
+Mat magThreshold(Mat img, int sobel_kernel = 3, int threshLow = 0, int threshHigh = 255)
+{
+	Mat grey;
+	Mat x;
+	Mat y;
+	Mat abs_x;
+	Mat abs_y;
+	Mat grad;
+	Mat binary_output;
+
+	// 1) Convert to grayscale
+	cvtColor(img, grey, COLOR_RGB2GRAY);
+
+	// 2) Take the gradient in x and y separately
+	Sobel(grey, x, CV_64F, 1, 0, sobel_kernel);
+	Sobel(grey, y, CV_64F, 0, 1, sobel_kernel);
+
+	// 3) Gets abs and scale to uint8
+	convertScaleAbs(x, abs_x);
+	convertScaleAbs(y, abs_y);
+
+	// 4) Approximate gradient by adding both directional gradients
+	addWeighted(abs_x, 0.5, abs_y, 0.5, 0, grad);
+
+	// 5) apply threshold
+	inRange(grad, threshLow, threshHigh, binary_output);
+
+	return binary_output;
+}
+
+// Gradient Direction - This function will filter based on the direction of the gradient. 
+// For lane detection, we will be interested in vertical linse that are +/0 some threshold near pi/2
+Mat dirThreshold(Mat img, int sobel_kernel = 3, int threshLow = 0, int threshHigh = pi/2)
+{
+	Mat grey;
+	Mat x;
+	Mat y;
+	Mat abs_x;
+	Mat abs_y;
+	Mat direction;
+	Mat binary_output;
+
+	// 1) Convert to grayscale
+	cvtColor(img, grey, COLOR_RGB2GRAY);
+
+	// 2) Take the gradient in x and y separately
+	Sobel(grey, x, CV_64F, 1, 0, sobel_kernel);
+	Sobel(grey, y, CV_64F, 0, 1, sobel_kernel);
+	
+	// 3) Gets abs
+	abs_x = abs(x);
+	abs_y = abs(y);
+
+	// 4) calculate direction of gradient
+	phase(abs_x, abs_y, direction);
+
+	// 5) threshold direction
+	inRange(direction, threshLow, threshHigh, binary_output);
+
+	return binary_output;
+}
+
+// Saturation Channel & Red Channel Filters
+// The gradient filters above all convert the og image in to greyscale losing a lot of information. Lane lines could be yellow or white and we can use that to try to locate and track them
+// The Hue, Saturation, Lightness colour space will help. In particular, the S channel of an HSL image retains a lot of information about lane lines, especially with shadows on the track
+// The Red channel of RGB also does a good job of creating binary images of lane lines;
+Mat hlsSelect(Mat img, Scalar threshLow = Scalar(0, 0, 0), Scalar threshHigh = Scalar(255, 255, 255))
+{
+	Mat hls;
+	Mat binary_output;
+
+	// 1) Convert to HLS colour space
+	cvtColor(img, hls, COLOR_RGB2HLS);
+
+	// 2) Apply thresholds
+	inRange(hls, threshLow, threshHigh, binary_output);
+
+	return binary_output;
+}
+
+Mat redSelect(Mat img, int lowThresh = 0, int highThresh = 255)
+{
+	Mat binary_output;
+	inRange(img, Scalar(lowThresh, 0, 0), Scalar(highThresh, 255, 255), binary_output);
+	return binary_output;
+}
+
+/// Combining Filter Methods
+// Mix and match different filter methods, each with unique threshold values, to get a refined binary image
+Mat binaryPipeline(Mat img)
+{
+	Mat img_blur;
+	GaussianBlur(img, img_blur, Size(9,9), 21);
+
+	// color channels
+	Mat s_binary = hlsSelect(img_blur, Scalar(0, 120, 140), Scalar(255, 255, 255));
+	// red_binary = redSelect(img_blur, 200, 255);
+	imshow("s_binary", s_binary);
+	// Sobel x
+	Mat x_binary = absSobelThresh(img_blur, 'x', 25, 200);
+	Mat y_binary = absSobelThresh(img_blur, 'y', 25, 200);
+
+	// Magnitude & Direction
+	Mat mag_binary = magThreshold(img_blur, 3, 30, 100);
+	Mat dir_binary = dirThreshold(img_blur, 3, 0.8, 1.2);
+
+	// Stack each channel
+	Mat final_binary;
+	Mat gradient;
+	Mat xy_binary;
+	bitwise_and(x_binary, y_binary, xy_binary);
+	Mat magdir_binary;
+	bitwise_and(mag_binary, dir_binary, magdir_binary);
+	bitwise_or(xy_binary, magdir_binary, gradient);
+	bitwise_or(s_binary, gradient, final_binary);
+
+	return final_binary;
+
+	
+}
+
 int main()
 {
+
 	Mat cameraFeed;
 	Mat greyFeed;
 	Mat hsvFeed;
@@ -289,6 +382,7 @@ int main()
 			}
 		}
 
+
 		// get greyscale image
 		cvtColor(cameraFeed, greyFeed, CV_BGR2GRAY);
 
@@ -331,4 +425,6 @@ int main()
 		
 		waitKey(30);
 	}
+
+	return 0;
 }
