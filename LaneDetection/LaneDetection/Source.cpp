@@ -18,6 +18,12 @@ const double pi = 3.1415926535897;
 const int FRAME_WIDTH = 640;
 const int FRAME_HEIGHT = 480;
 
+bool laneIsEmpty(Lane lane)
+{
+	if (lane.numberOfLanes == 0) return true;
+	else return false;
+}
+
 int process_lines(Mat img, vector<Vec4i> lines, Scalar color = Scalar(255, 0, 0), int thickness = 5)
 {
 	/* workflow
@@ -33,8 +39,6 @@ int process_lines(Mat img, vector<Vec4i> lines, Scalar color = Scalar(255, 0, 0)
 	static vector<double> cache = { 0, 0, 0, 0, 0, 0, 0, 0 };
 	static bool first_frame = true;
 	static int linesCrossed = 0;
-	static double lastDistl = 0;
-	static double lastDistr = 0;
 
 	int y_global_min = img.rows;
 	int y_max = img.rows;
@@ -54,6 +58,7 @@ int process_lines(Mat img, vector<Vec4i> lines, Scalar color = Scalar(255, 0, 0)
 		//1)
 		Vec4i l = lines[i];
 		double slope = (double(l[3]) - double(l[1])) / (double(l[2]) - double(l[0])); // (y2-y1)/(x2-x1)
+		if (slope == std::numeric_limits<double>::infinity()) slope = (double(img.rows)) / 1;
 		double b = 0;
 
 		//slope = std::abs(slope);
@@ -65,14 +70,15 @@ int process_lines(Mat img, vector<Vec4i> lines, Scalar color = Scalar(255, 0, 0)
 			// MED classifier
 			if (slope != std::numeric_limits<double>::infinity())
 			{
-				b = (double(l[1]) - slope * double(l[0])) / slope;
-				double minDist = 10000;
+				b = (slope * double(l[0]) - double(l[1])) / slope;
+				double x = (slope * b + img.rows) / slope;
+				double minDist = 100000;
 				for (int j = 0; j < lanes.size(); j++)
 				{
 					Lane lane = lanes[j];
-					double lSlope = lane.getSlope();
+					double lx = lane.getX(img.rows);
 					double lB = lane.getB();
-					double dist = pow(slope, 2) - 2 * slope*lSlope + pow(lSlope, 2) + pow(b, 2) - 2 * b*lB + pow(lB, 2);
+					double dist = abs(pow(x, 2) - 2 * x*lx + pow(lx, 2) + pow(b, 2) - 2 * b*lB + pow(lB, 2));
 					if (dist < minDist)
 					{
 						minDist = dist;
@@ -126,44 +132,48 @@ int process_lines(Mat img, vector<Vec4i> lines, Scalar color = Scalar(255, 0, 0)
 	//Lane* l_lane = NULL;
 	//Lane* r_lane = NULL;
 
-	double threshold = 100;
+	double threshold = 1000;
 
 	double distl = threshold * 2;
 	double distr = -threshold * 2;
+
+	lanes.erase(std::remove_if(lanes.begin(), lanes.end(), laneIsEmpty), lanes.end());
+	
 	for (int i = 0; i < lanes.size(); i++)
 	{
-		Lane lane = lanes[i];
+		Lane& lane = lanes[i];
 		double x1 = lane.getX(y1);
 		double x2 = lane.getX(y2);
 		line(img, Point(int(x1), int(y1)), Point(int(x2), int(y2)), Scalar(0, 255, 0), thickness);
 
 		// get distance
 		double dist = xpoint - x2;
+		
+		if (lane.lastFrame) lane.lastRight = lane.right;
+		if (dist > 0 && dist < distl)
+		{
+			lane.right = false;
+			if (dist < distl) distl = dist;
+		}
+		else if (dist < 0 && dist > distr) 
+		{
+			lane.right = true;
+			if (dist > distr) distr = dist;
+		}
+		lane.oldSlope = lane.getSlope(true);
+		lane.oldB = lane.getB(true);
+		lane.totalSlope = 0;
+		lane.totalB = 0;
+		lane.numberOfLanes = 0;
+		lane.lastFrame = true;
 
-		if (dist > 0 && dist < distl) distl = dist;
-		else if (dist < 0 && dist > distr) distr = dist;
-
-
+		if (lane.lastRight && !lane.right) linesCrossed++;
+		else if (!lane.lastRight && lane.right) linesCrossed--;
 	}
-	
-	//cache = next_frame;
-
-
-	if (lastDistl > 0 && distl < 0) {
-		linesCrossed--;
-	}
-	if (distl < threshold || linesCrossed < 0)
-	{
-		lastDistl = distl;
-		return 1;	
-	}
-	if (lastDistr < 0 && distr > 0) {
-		linesCrossed++;
-	}
-	if (distr > -threshold || linesCrossed > 0) {
-		lastDistr = distr;
-		return 2;
-	}
+	if (linesCrossed < 0) return 1;
+	else if (linesCrossed > 0) return 2;
+	if (distl < threshold) return 1;	
+	else if (distr > -threshold) return 2;
 	return 0;
 }
 

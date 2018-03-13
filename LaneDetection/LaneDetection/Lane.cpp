@@ -9,6 +9,8 @@ Lane::Lane(double slope, double b)
 	totalSlope += slope;
 	totalB += b;
 	numberOfLanes++;
+	lastFrame = false;
+	if (slope > 0) numberOfPosSlope++;
 }
 
 Lane::Lane()
@@ -21,21 +23,28 @@ Lane::~Lane()
 
 }
 
-double Lane::getSlope()
+double Lane::getSlope(bool getCurrent)
 {
-	return totalSlope / numberOfLanes;
+	if (!lastFrame || getCurrent)
+	{
+		int factor = 1;
+		//if (numberOfLanes - numberOfPosSlope > 0) factor = -1;
+		return factor * totalSlope / numberOfLanes;
+	}
+	else return oldSlope;
 }
 
-double Lane::getB()
+double Lane::getB(bool getCurrent)
 {
-	return totalB / numberOfLanes;
+	if (!lastFrame || getCurrent) return totalB / numberOfLanes;
+	else return oldB;
 }
 
 double Lane::getX(double y)
 {
 	// y = mx + b
 	// (y - b)/m
-	if (getSlope() != std::numeric_limits<double>::infinity()) return (y - getSlope() * getB()) / getSlope();
+	if (getSlope() != std::numeric_limits<double>::infinity()) return (getSlope() * getB() + y) / getSlope();
 	else return getB();
 }
 
