@@ -104,7 +104,7 @@ int process_lines(Mat img, vector<Vec4i> lines, Scalar color = Scalar(255, 0, 0)
 			}
 
 
-			if (minIndex >= 0) lanes[minIndex].addLane(slope, b);
+			if (minIndex >= 0) lanes[minIndex].addLane(slope, b, l[3], l[1], img.rows);
 			else
 			{
 				Lane lane = Lane(slope, b);
@@ -132,7 +132,7 @@ int process_lines(Mat img, vector<Vec4i> lines, Scalar color = Scalar(255, 0, 0)
 	//Lane* l_lane = NULL;
 	//Lane* r_lane = NULL;
 
-	double threshold = 1000;
+	double threshold = 100;
 
 	double distl = threshold * 2;
 	double distr = -threshold * 2;
@@ -142,33 +142,48 @@ int process_lines(Mat img, vector<Vec4i> lines, Scalar color = Scalar(255, 0, 0)
 	for (int i = 0; i < lanes.size(); i++)
 	{
 		Lane& lane = lanes[i];
-		double x1 = lane.getX(y1);
-		double x2 = lane.getX(y2);
-		line(img, Point(int(x1), int(y1)), Point(int(x2), int(y2)), Scalar(0, 255, 0), thickness);
+		if (lane.isLaneLine)
+		{
+			if (!lane.isFullLine) lane.buffer--;
+			else lane.buffer = 3;
+			if (lane.buffer == 0) lane.isLaneLine = false;
+		}
+		if (lane.isLaneLine)
+		{
+			double x1 = lane.getX(y1);
+			double x2 = lane.getX(y2);
+			line(img, Point(int(x1), int(y1)), Point(int(x2), int(y2)), Scalar(0, 255, 0), thickness);
 
-		// get distance
-		double dist = xpoint - x2;
-		
-		if (lane.lastFrame) lane.lastRight = lane.right;
-		if (dist > 0 && dist < distl)
-		{
-			lane.right = false;
-			if (dist < distl) distl = dist;
+			// get distance
+			double dist = xpoint - x2;
+
+			if (lane.lastFrame) lane.lastRight = lane.right;
+			if (dist > 0)
+			{
+				lane.right = false;
+				if (dist < distl) distl = dist;
+			}
+			else if (dist < 0)
+			{
+				lane.right = true;
+				if (dist > distr) distr = dist;
+			}
+			if (lane.lastFrame)
+			{
+				if (lane.lastRight && !lane.right) linesCrossed++;
+				else if (!lane.lastRight && lane.right) linesCrossed--;
+			}
+			
 		}
-		else if (dist < 0 && dist > distr) 
-		{
-			lane.right = true;
-			if (dist > distr) distr = dist;
-		}
+
 		lane.oldSlope = lane.getSlope(true);
 		lane.oldB = lane.getB(true);
 		lane.totalSlope = 0;
 		lane.totalB = 0;
 		lane.numberOfLanes = 0;
+		lane.isFullLine = false;
 		lane.lastFrame = true;
-
-		if (lane.lastRight && !lane.right) linesCrossed++;
-		else if (!lane.lastRight && lane.right) linesCrossed--;
+		
 	}
 	if (linesCrossed < 0) return 1;
 	else if (linesCrossed > 0) return 2;
@@ -346,7 +361,7 @@ int main()
 	Mat result;
 
 	VideoCapture capture;
-	capture.open("C:\\Ilir\\School\\361\\Videos\\VID_20180225_132717.mp4");
+	capture.open("C:\\Ilir\\School\\361\\Videos\\20180225_131538.mp4");
 	
 	// set height and width of capture frame
 	capture.set(CV_CAP_PROP_FRAME_WIDTH, FRAME_WIDTH);

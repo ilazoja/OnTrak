@@ -48,9 +48,13 @@ double Lane::getX(double y)
 	else return getB();
 }
 
-void Lane::addLane(double slope, double b)
+void Lane::addLane(double slope, double b, int y1, int y2, int rows)
 {
 	totalSlope += slope;
 	totalB += b;
 	numberOfLanes++;
+	if (isLaneLine)
+	{
+		if (abs(y1 - y2) > 900) isFullLine = true;
+	}
 }

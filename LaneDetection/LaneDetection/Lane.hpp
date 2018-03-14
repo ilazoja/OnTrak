@@ -10,7 +10,7 @@ public:
 	double getSlope(bool getCurrent = false);
 	double getB(bool getCurrent = false);
 	double getX(double y);
-	void addLane(double slope, double b);
+	void addLane(double slope, double b, int y1, int y2, int rows);
 
 	double totalSlope = 0;
 	double totalB = 0;
@@ -23,4 +23,7 @@ public:
 
 	bool right;
 	bool lastRight;
+	bool isFullLine = false;
+	int buffer = 2;
+	bool isLaneLine = true;
 };
