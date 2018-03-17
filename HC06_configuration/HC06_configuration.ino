@@ -1,5 +1,5 @@
 #include <SoftwareSerial.h>
-SoftwareSerial mySerial(4, 2); // RX, TX
+SoftwareSerial mySerial(4, 2); // RX, TX - DI goes to RX and D0 goes to TX.
 int LED_right_1 = 8;
 int LED_left_0 = 9;
 int LED_right_3 = 10;
