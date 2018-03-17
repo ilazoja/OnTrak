@@ -40,21 +40,21 @@ double Lane::getB(bool getCurrent)
 	else return oldB;
 }
 
-double Lane::getX(double y)
+double Lane::getX(double y, bool getCurrent)
 {
 	// y = mx + b
 	// (y - b)/m
-	if (getSlope() != std::numeric_limits<double>::infinity()) return (getSlope() * getB() + y) / getSlope();
+	if (getSlope() != std::numeric_limits<double>::infinity()) return (getSlope(getCurrent) * getB(getCurrent) + y) / getSlope(getCurrent);
 	else return getB();
 }
 
-void Lane::addLane(double slope, double b, int y1, int y2, int rows)
+void Lane::addLane(double slope, double b, int y1, int y2, int x1, int x2, int rows, int cols)
 {
 	totalSlope += slope;
 	totalB += b;
 	numberOfLanes++;
 	if (isLaneLine)
 	{
-		if (abs(y1 - y2) > 900) isFullLine = true;
+		if (y1 > rows - 300 || y2 > rows - 300 || x1 > cols - 300 || x2 > cols - 300 || x1 < 300 || x2 < 300 ) isFullLine = true;
 	}
 }

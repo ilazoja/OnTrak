@@ -9,8 +9,8 @@ public:
 
 	double getSlope(bool getCurrent = false);
 	double getB(bool getCurrent = false);
-	double getX(double y);
-	void addLane(double slope, double b, int y1, int y2, int rows);
+	double getX(double y, bool getCurrent = false);
+	void addLane(double slope, double b, int y1, int y2, int x1, int x2, int rows, int cols);
 
 	double totalSlope = 0;
 	double totalB = 0;
