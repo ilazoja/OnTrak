@@ -7,7 +7,7 @@
 #include <iostream>
 #include <numeric>
 #include "opencv2/imgproc.hpp"
-#include "opencv2/highgui.hpp"
+#include <opencv2/highgui.hpp>
 #include "Lane.hpp"
 
 using namespace std;
