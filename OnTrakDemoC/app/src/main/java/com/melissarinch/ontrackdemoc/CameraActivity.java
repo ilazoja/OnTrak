@@ -18,6 +18,7 @@ import org.opencv.core.CvType;
 import org.opencv.core.Mat;
 import org.opencv.imgproc.Imgproc;
 
+
 /**
  * Created by melis on 3/23/2018.
  */
@@ -38,6 +39,7 @@ public class CameraActivity extends AppCompatActivity implements CvCameraViewLis
         Mat mRgba;
         Mat mRgbaF;
         Mat mRgbaT;
+
 
         private BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
             @Override
@@ -75,6 +77,9 @@ public class CameraActivity extends AppCompatActivity implements CvCameraViewLis
             mOpenCvCameraView.setVisibility(SurfaceView.VISIBLE);
 
             mOpenCvCameraView.setCvCameraViewListener(this);
+            mOpenCvCameraView.setMinimumHeight(400);
+            mOpenCvCameraView.setMinimumWidth(400);
+            mOpenCvCameraView.setMaxFrameSize(400, 400);
         }
 
         @Override
@@ -124,7 +129,12 @@ public class CameraActivity extends AppCompatActivity implements CvCameraViewLis
             Imgproc.resize(mRgbaT, mRgbaF, mRgbaF.size(), 0,0, 0);
             Core.flip(mRgbaF, mRgba, 1 );
 
+            NativeClass.Source(mRgba);
+            Log.i("cam", "camera frame captured");
+
             return mRgba; // This function must return
         }
+
+
     }
 
