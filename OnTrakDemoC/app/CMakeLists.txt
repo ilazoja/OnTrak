@@ -19,7 +19,8 @@ include_directories(${pathToOpenCv}/sdk/native/jni/include)
 file(GLOB SOURCES "C:/Users/melis/AndroidStudioProjects/OnTrak/OnTrak/LaneDetection/LaneDetection/*.cpp"
 "C:/Users/melis/AndroidStudioProjects/OnTrak/OnTrak/LaneDetection/LaneDetection/*.hpp"
 "C:/Users/melis/AndroidStudioProjects/OnTrak/OnTrak/LaneDetection/LaneDetection/*.hpp"
-"src/main/cpp/*.cpp")
+"src/main/cpp/*.cpp"
+"src/main/cpp/*.h")
 
 add_library( # Sets the name of the library.
              native-lib
