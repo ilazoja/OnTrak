@@ -120,6 +120,12 @@ public class CameraActivity extends AppCompatActivity implements CvCameraViewLis
             mRgba.release();
         }
 
+    // Used to load the 'native-lib' library on application startup.
+    static {
+        System.loadLibrary("native-lib");
+        System.loadLibrary("opencv_java3");
+
+    }
         public Mat onCameraFrame(CvCameraViewFrame inputFrame) {
 
             // TODO Auto-generated method stub
@@ -129,8 +135,10 @@ public class CameraActivity extends AppCompatActivity implements CvCameraViewLis
             Imgproc.resize(mRgbaT, mRgbaF, mRgbaF.size(), 0,0, 0);
             Core.flip(mRgbaF, mRgba, 1 );
 
-            NativeClass.Source(mRgba);
-            Log.i("cam", "camera frame captured");
+          String a =  SourceClass.processImage();
+
+
+//            Log.i("cam", a);
 
             return mRgba; // This function must return
         }
