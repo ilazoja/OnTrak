@@ -20,11 +20,11 @@ const int FRAME_WIDTH = 640;
 const int FRAME_HEIGHT = 480;
 //initial min and max HSV filter values.
 //these will be changed using trackbars
-int H_MIN = 130;
+int H_MIN = 144;
 int H_MAX = 256;
-int L_MIN = 237; //0 //121
+int L_MIN = 42; //0 //121
 int L_MAX = 256;
-int S_MIN = 0; //96 //0
+int S_MIN = 39; //96 //0
 int S_MAX = 256;
 
 bool mouseIsDragging;//used for showing a rectangle on screen as user clicks and drags mouse
@@ -33,6 +33,8 @@ bool rectangleSelected;
 cv::Point initialClickPoint, currentMousePoint; //keep track of initial point clicked and current position of mouse
 cv::Rect rectangleROI; //this is the ROI that the user has selected
 vector<int> H_ROI, L_ROI, S_ROI;// HSV values from the click/drag ROI region stored in separate vectors so that we can sort them easily
+
+RNG rng(12345);
 
 void on_trackbar(int, void*)
 {//This function gets called whenever a
@@ -361,7 +363,7 @@ void update_line(Mat img, int lowerXBound, int lowerYBound, Mat& line_img, vecto
 
 	cvtColor(gaussFeed, greyFeed, CV_BGR2GRAY);
 
-	mask_hls = hlsSelect(gaussFeed, Scalar(H_MIN, L_MIN, S_MIN), Scalar(H_MAX, L_MAX, S_MAX));
+	mask_hls = hlsSelect(gaussFeed, Scalar(0, 117, 0), Scalar(60, 256, 256));
 	inRange(greyFeed, 200, 255, mask_white); // get white mask
 	bitwise_or(mask_white, mask_hls, mask_whls); // get white and yellow mask combined
 	bitwise_and(greyFeed, mask_whls, mask_whls_image); // get filtered image
@@ -378,7 +380,9 @@ void update_line(Mat img, int lowerXBound, int lowerYBound, Mat& line_img, vecto
 	double min_line_len = 200;
 	double max_line_gap = 200;
 	HoughLinesP(canny_edges, hough_lines, rho, theta, thresholdHough, min_line_len, max_line_gap);
-	imshow("canny", mask_hls);
+
+	
+	imshow("canny", mask_whls);
 	//int decision = process_lines(line_img, hough_lines);
 
 	// process_lines
@@ -447,10 +451,8 @@ void update_line(Mat img, int lowerXBound, int lowerYBound, Mat& line_img, vecto
 
 }
 
-int main()
+bool find_obstacles(Mat img)
 {
-
-	Mat cameraFeed;
 	Mat greyFeed;
 	Mat hsvFeed;
 
@@ -462,11 +464,59 @@ int main()
 	Mat canny_edges;
 	vector<Vec4i> hough_lines;
 	Mat result;
+	vector<vector<Point>> contours;
+	vector<Vec4i> hierarchy;
+
+	GaussianBlur(img, gaussFeed, Size(23, 23), 100); // helps suppress noise
+
+													 // get greyscale image
+
+	cvtColor(gaussFeed, greyFeed, CV_BGR2GRAY);
+
+	mask_hls = hlsSelect(gaussFeed, Scalar(H_MIN, L_MIN, S_MIN), Scalar(H_MAX, L_MAX, S_MAX));
+	inRange(greyFeed, 200, 255, mask_white); // get white mask
+	bitwise_not(mask_white, mask_white);
+	bitwise_and(mask_white, mask_hls, mask_whls); // get white and yellow mask combined
+	bitwise_and(greyFeed, mask_whls, mask_whls_image); // get filtered image
+
+	double low_threshold = 100;
+	double high_threshold = low_threshold * 3;
+	Canny(mask_whls_image, canny_edges, low_threshold, high_threshold); // canny edge detection
+
+	//findContours(canny_edges, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, Point(0, 0));
+
+	/// Draw contours
+	//Mat drawing = Mat::zeros(canny_edges.size(), CV_8UC3);
+	//for (int i = 0; i< contours.size(); i++)
+	//{
+	//	Scalar color = Scalar(rng.uniform(0, 255), rng.uniform(0, 255), rng.uniform(0, 255));
+	//	drawContours(drawing, contours, i, color, 2, 8, hierarchy, 0, Point());
+	//}
+	vector<Point> white_pixels;
+	findNonZero(canny_edges, white_pixels);
+	int threshold = 400;
+	imshow("obstacle", canny_edges);
+	return white_pixels.size() > threshold;
+}
+
+int main()
+{
+	bool detectObjects = true;
+
+
+	Mat cameraFeed;
+	Mat result;
+	Mat line_img;
+
+	bool started = false;
+	int linesCrossed = 0;
 
 	int searchRange = 200;
+	bool obstacleDetectedLastFrame = false;
+	bool obstacleDetectedCurrentFrame = false;
 
 	VideoCapture capture;
-	capture.open("C:\\Ilir\\School\\361\\Videos\\VID_20180225_132717.mp4");
+	capture.open("C:\\Ilir\\School\\361\\Videos\\VID_20180225_132827.mp4");
 	
 	// set height and width of capture frame
 	capture.set(CV_CAP_PROP_FRAME_WIDTH, FRAME_WIDTH);
@@ -514,15 +564,23 @@ int main()
 		}
 
 		static vector<Lane> lanes = {};
-		static int linesCrossed = 0;
+		
 		Mat line_img(cameraFeed.rows, cameraFeed.cols, CV_8UC3, Scalar(0, 0, 0));
 
 		if (number_of_frames % 5 == 0)
 		{
-			if (lanes.size() == 0)
+			if (detectObjects)
 			{
-				Mat sub_img = cameraFeed(Range(line_img.rows / 2, line_img.rows), Range(0, line_img.cols));
-				update_line(sub_img, 0, line_img.rows / 2, line_img, lanes);
+				obstacleDetectedLastFrame = obstacleDetectedCurrentFrame;
+				obstacleDetectedCurrentFrame = find_obstacles(cameraFeed(Range(0, line_img.rows / 2), Range(line_img.cols / 4, line_img.cols * 3 / 4)));
+				if (obstacleDetectedCurrentFrame && !obstacleDetectedLastFrame) linesCrossed--;
+				if (!obstacleDetectedCurrentFrame && obstacleDetectedLastFrame) linesCrossed++;
+			}
+			
+			if (!started || lanes.size() == 0)
+			{
+				Mat sub_img = cameraFeed(Range(0, line_img.rows), Range(0, line_img.cols));
+				update_line(sub_img, 0, 0, line_img, lanes);
 			}
 			else
 			{
@@ -599,7 +657,7 @@ int main()
 				}
 			}
 			
-
+			if (lanes.size() > 1) started = true;
 			/*if (l_lane.size() == 0 || r_lane.size() == 0)
 			{
 			return -1; // no lane detected
@@ -719,9 +777,9 @@ int main()
 				distrFromUser = (double)cameraFeed.cols / 2 - lanes[rightLaneIndex].getX(line_img.rows, true);
 				lanes[rightLaneClosestIndex].isLaneLine = false;
 			}
-
-			if (linesCrossed < 0) decision = 1;
-			else if (linesCrossed > 0) decision = 2;
+			if (!started) decision = 3;
+			else if (linesCrossed < 0) decision = 2;
+			else if (linesCrossed > 0) decision = 1;
 			else if (distlFromUser < threshold) decision = 1;
 			else if (distrFromUser > -threshold) decision = 2;
 			else decision = 0;
