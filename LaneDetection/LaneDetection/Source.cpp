@@ -3,7 +3,7 @@
 
 // maybe change left or right classification based on location from middle?
 
-#include <windows.h>
+#include <limits>
 #include <iostream>
 #include <numeric>
 #include "opencv2/imgproc.hpp"
@@ -12,6 +12,7 @@
 
 using namespace std;
 using namespace cv;
+
 
 //default capture width and height
 const double pi = 3.1415926535897;
@@ -202,436 +203,264 @@ Mat binaryPipeline(Mat img)
 
 	
 }
+extern "C"
+JNIEXPORT jstring JNICALL
+Java_com_melissarinch_ontrackdemoc_SourceClass_processImage(JNIEnv *env, long mRgba){
+//int processImage(Mat matAddrRgba) {
 
-void createTrackbars() {
-	//create window for trackbars
-	String trackbarWindowName = "Trackbars";
 
-	namedWindow(trackbarWindowName, 0);
-	//create memory to store trackbar name on window
-	char TrackbarName[50];
-	sprintf_s(TrackbarName, "H_MIN", H_MIN);
-	sprintf_s(TrackbarName, "H_MAX", H_MAX);
-	sprintf_s(TrackbarName, "L_MIN", L_MIN);
-	sprintf_s(TrackbarName, "L_MAX", L_MAX);
-	sprintf_s(TrackbarName, "S_MIN", S_MIN);
-	sprintf_s(TrackbarName, "S_MAX", S_MAX);
-	//create trackbars and insert them into window
-	//3 parameters are: the address of the variable that is changing when the trackbar is moved(eg.H_LOW),
-	//the max value the trackbar can move (eg. H_HIGH), 
-	//and the function that is called whenever the trackbar is moved(eg. on_trackbar)
-	//                                  ---->    ---->     ---->      
-	createTrackbar("H_MIN", trackbarWindowName, &H_MIN, H_MAX, on_trackbar);
-	createTrackbar("H_MAX", trackbarWindowName, &H_MAX, H_MAX, on_trackbar);
-	createTrackbar("L_MIN", trackbarWindowName, &L_MIN, L_MAX, on_trackbar);
-	createTrackbar("L_MAX", trackbarWindowName, &L_MAX, L_MAX, on_trackbar);
-	createTrackbar("S_MIN", trackbarWindowName, &S_MIN, S_MAX, on_trackbar);
-	createTrackbar("S_MAX", trackbarWindowName, &S_MAX, S_MAX, on_trackbar);
+    Mat &cameraFeed = *(Mat*)mRgba;
+    Mat greyFeed;
+    Mat hsvFeed;
+
+    Mat mask_hls;
+    Mat mask_white;
+    Mat mask_whls;
+    Mat mask_whls_image;
+    Mat gaussFeed;
+    Mat canny_edges;
+    vector<Vec4i> hough_lines;
+    Mat result;
+
+
+
+    int number_of_frames = 0;
+
+    //Mat gray_image = cvtColor
+   // while (1) {
+
+        if (number_of_frames % 3 == 0) {
+            GaussianBlur(cameraFeed, gaussFeed, Size(7, 7), 20); // helps suppress noise
+
+            // get greyscale image
+
+            cvtColor(gaussFeed, greyFeed, CV_BGR2GRAY);
+
+
+            mask_hls = hlsSelect(gaussFeed, Scalar(H_MIN, L_MIN, S_MIN),
+                                 Scalar(H_MAX, L_MAX, S_MAX));
+            inRange(greyFeed, 240, 255, mask_white); // get white mask
+            bitwise_or(mask_white, mask_hls, mask_whls); // get white and yellow mask combined
+            bitwise_and(greyFeed, mask_whls, mask_whls_image); // get filtered image
+
+
+            double low_threshold = 50;
+            double high_threshold = low_threshold * 3;
+            Canny(mask_whls_image, canny_edges, low_threshold,
+                  high_threshold); // canny edge detection
+
+            // rho and theta are the distance and angular resolution of the grid in Hough space
+            double rho = 1;
+            double theta = pi / 180;
+            // threshold is minimum number of intersections in a grid for candidate line to go to output
+            int thresholdHough = 100;
+            double min_line_len = 200;
+            double max_line_gap = 200;
+            HoughLinesP(canny_edges, hough_lines, rho, theta, thresholdHough, min_line_len,
+                        max_line_gap);
+            Mat line_img(greyFeed.rows, greyFeed.cols, CV_8UC3, Scalar(0, 0, 0));
+            imshow("canny", mask_hls);
+            //int decision = process_lines(line_img, hough_lines);
+
+            // process_lines
+
+            /* workflow
+            1) examine each individual line returned by hough & determine if it's in left or right lane by its slope
+            because we are working "upside down" with the array, the left lane will have a negative slope and right positive
+            2) track extrema
+            3) compute average
+            4) solve for b intercept
+            5) use extreme to solve for points
+            6) smooth frames and cache
+            */
+
+            static vector<double> cache = {0, 0, 0, 0, 0, 0, 0, 0};
+            static bool first_frame = true;
+            static int linesCrossed = 0;
+
+            int y_global_min = line_img.rows;
+            int y_max = line_img.rows;
+
+            vector<double> l_slope = {};
+            vector<double> r_slope = {};
+            vector<Vec4i> l_lane = {};
+            vector<Vec4i> r_lane = {};
+
+            static vector<Lane> lanes = {};
+
+            double det_slope = 0.5;
+            double a = 0.4;
+
+            for (int i = 0; i < hough_lines.size(); i++) {
+                //1)
+                Vec4i l = hough_lines[i];
+                double slope = (double(l[3]) - double(l[1])) /
+                               (double(l[2]) - double(l[0])); // (y2-y1)/(x2-x1)
+                if (slope == std::numeric_limits<double>::infinity())
+                    slope = (double(line_img.rows)) / 1;
+                double b = 0;
+
+                //slope = std::abs(slope);
+                //b = std::abs(b);
+                int minIndex = -1;
+                if (abs(slope) > det_slope) {
+
+                    // MED classifier
+                    if (slope != std::numeric_limits<double>::infinity()) {
+                        b = (slope * double(l[0]) - double(l[1])) / slope;
+                        double x = (slope * b + line_img.rows) / slope;
+                        double minDist = 50000;
+                        for (int j = 0; j < lanes.size(); j++) {
+                            Lane lane = lanes[j];
+                            double lx = lane.getX(line_img.rows);
+                            double lB = lane.getB();
+                            double dist = abs(
+                                    pow(x, 2) - 2 * x * lx + pow(lx, 2) + pow(b, 2) - 2 * b * lB +
+                                    pow(lB, 2));
+                            if (dist < minDist) {
+                                minDist = dist;
+                                minIndex = j;
+                            }
+                        }
+                    } else {
+                        b = l[0];
+                        double minDist = 100;
+                        for (int j = 0; j < lanes.size(); j++) {
+                            Lane lane = lanes[j];
+                            double lB = lane.getB();
+                            double dist = abs(lB - b);
+                            if (dist < minDist) {
+                                minDist = dist;
+                                minIndex = j;
+                            }
+                        }
+                    }
+
+
+                    if (minIndex >= 0)
+                        lanes[minIndex].addLane(slope, b, l[3], l[1], l[0], l[2], line_img.rows,
+                                                line_img.cols);
+                    else {
+                        Lane lane = Lane(slope, b);
+                        lanes.push_back(lane);
+                    }
+                }
+                line(line_img, Point(int(l[0]), int(l[1])), Point(int(l[2]), int(l[3])),
+                     Scalar(255, 0, 0), 5); //enable to display all hough lines
+
+            }
+
+            /*if (l_lane.size() == 0 || r_lane.size() == 0)
+            {
+            return -1; // no lane detected
+            }*/
+
+
+            double y1 = 0;
+            double y2 = line_img.rows;
+
+            // compute distance
+
+            // get middle x of the screen
+            double xpoint = (double) line_img.cols / 2;
+
+            //Lane* l_lane = NULL;
+            //Lane* r_lane = NULL;
+
+            double threshold = 100;
+
+            double distl = threshold * 2;
+            double distr = -threshold * 2;
+
+            lanes.erase(std::remove_if(lanes.begin(), lanes.end(), laneIsEmpty), lanes.end());
+
+            for (int i = 0; i < lanes.size(); i++) {
+                Lane &lane = lanes[i];
+                double x1 = lane.getX(y1, true);
+                double x2 = lane.getX(y2, true);
+
+                if (lane.isLaneLine || x2 >= 0 || x2 <= line_img.cols) {
+                    if (!lane.isFullLine) {
+                        --lane.buffer;
+                    } else lane.buffer = 2;
+                    if (lane.buffer == 0) {
+                        lane.isLaneLine = false;
+                    }
+                }
+                if (lane.isLaneLine) {
+
+                    line(line_img, Point(int(x1), int(y1)), Point(int(x2), int(y2)),
+                         Scalar(0, 255, 0), 5);
+
+                    // get distance
+                    double dist = xpoint - x2;
+
+                    if (lane.lastFrame) lane.lastRight = lane.right;
+                    if (dist > 0) {
+                        lane.right = false;
+                        if (dist < distl) distl = dist;
+                    } else if (dist < 0) {
+                        lane.right = true;
+                        if (dist > distr) distr = dist;
+                    }
+                    if (lane.lastFrame) {
+                        if (lane.lastRight && !lane.right) linesCrossed++;
+                        else if (!lane.lastRight && lane.right) linesCrossed--;
+                    }
+
+                }
+
+                lane.oldSlope = lane.getSlope(true);
+                lane.oldB = lane.getB(true);
+                lane.totalSlope = 0;
+                lane.totalB = 0;
+                lane.numberOfLanes = 0;
+                lane.isFullLine = false;
+                lane.lastFrame = true;
+
+            }
+            int decision = 0;
+            if (linesCrossed < 0) decision = 1;
+            else if (linesCrossed > 0) decision = 2;
+            if (distl < threshold) decision = 1;
+            else if (distr > -threshold) decision = 2;
+
+            //--------------------
+
+            addWeighted(line_img, 0.8, cameraFeed, 1, 0, result);
+            int font = FONT_HERSHEY_SIMPLEX;
+            string msg;
+            if (decision == 1) msg = "LEFT";
+            else if (decision == 2) msg = "RIGHT";
+            else msg = "ON TRACK";
+            putText(result, msg, Point(10, 500), font, 4, Scalar(255, 255, 255), 2, LINE_AA);
+
+            imshow("Raw", line_img);
+            imshow("Result", result);
+
+
+            waitKey(30);
+        }
+
+  //  }
+
+    std::string hello = "Hello +";
+    return env->NewStringUTF(hello.c_str());
+}
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_melissarinch_ontrackdemoc_SourceClass_getMat(JNIEnv *env, jobject instance, jlong mRgba, jlong greyfeed){
+    Mat &src = *(Mat*)mRgba;
+    Mat gaussFeed;
+    Mat &greyFeed = *(Mat*)greyfeed;
+
+   if(src.rows > 0 && src.cols > 0) {
+       GaussianBlur(src, gaussFeed, Size(7, 7), 20); // helps suppress noise
+
+       cvtColor(gaussFeed, greyFeed, CV_BGR2GRAY);
+   }
+    std::string hello = "Hello 1";
 
 }
 
-void clickAndDrag_Rectangle(int event, int x, int y, int flags, void* param) {
-	//only if calibration mode is true will we use the mouse to change HSV values
-	
-	bool calibrationMode = true;//used for showing debugging windows, trackbars etc.
-
-
-	if (calibrationMode == true) {
-		//get handle to video feed passed in as "param" and cast as Mat pointer
-		Mat* videoFeed = (Mat*)param;
-
-		if (event == CV_EVENT_LBUTTONDOWN && mouseIsDragging == false)
-		{
-			//keep track of initial point clicked
-			initialClickPoint = cv::Point(x, y);
-			//user has begun dragging the mouse
-			mouseIsDragging = true;
-		}
-		/* user is dragging the mouse */
-		if (event == CV_EVENT_MOUSEMOVE && mouseIsDragging == true)
-		{
-			//keep track of current mouse point
-			currentMousePoint = cv::Point(x, y);
-			//user has moved the mouse while clicking and dragging
-			mouseMove = true;
-		}
-		/* user has released left button */
-		if (event == CV_EVENT_LBUTTONUP && mouseIsDragging == true)
-		{
-			//set rectangle ROI to the rectangle that the user has selected
-			rectangleROI = Rect(initialClickPoint, currentMousePoint);
-
-			//reset boolean variables
-			mouseIsDragging = false;
-			mouseMove = false;
-			rectangleSelected = true;
-		}
-
-		if (event == CV_EVENT_RBUTTONDOWN) {
-			//user has clicked right mouse button
-			//Reset HSV Values
-			H_MIN = 0;
-			L_MIN = 0;
-			S_MIN = 0;
-			H_MAX = 255;
-			L_MAX = 255;
-			S_MAX = 255;
-
-		}
-		if (event == CV_EVENT_MBUTTONDOWN) {
-
-			//user has clicked middle mouse button
-			//enter code here if needed.
-		}
-	}
-
-}
-
-void recordHSV_Values(cv::Mat frame, cv::Mat hsv_frame) {
-
-	//save HSV values for ROI that user selected to a vector
-	if (mouseMove == false && rectangleSelected == true) {
-
-		//clear previous vector values
-		if (H_ROI.size()>0) H_ROI.clear();
-		if (L_ROI.size()>0) L_ROI.clear();
-		if (S_ROI.size()>0) S_ROI.clear();
-		//if the rectangle has no width or height (user has only dragged a line) then we don't try to iterate over the width or height
-		if (rectangleROI.width<1 || rectangleROI.height<1) cout << "Please drag a rectangle, not a line" << endl;
-		else {
-			for (int i = rectangleROI.x; i<rectangleROI.x + rectangleROI.width; i++) {
-				//iterate through both x and y direction and save HSV values at each and every point
-				for (int j = rectangleROI.y; j<rectangleROI.y + rectangleROI.height; j++) {
-					//save HSV value at this point
-					H_ROI.push_back((int)hsv_frame.at<cv::Vec3b>(j, i)[0]);
-					L_ROI.push_back((int)hsv_frame.at<cv::Vec3b>(j, i)[1]);
-					S_ROI.push_back((int)hsv_frame.at<cv::Vec3b>(j, i)[2]);
-				}
-			}
-		}
-		//reset rectangleSelected so user can select another region if necessary
-		rectangleSelected = false;
-		//set min and max HSV values from min and max elements of each array
-
-		if (H_ROI.size()>0) {
-			//NOTE: min_element and max_element return iterators so we must dereference them with "*"
-			H_MIN = *std::min_element(H_ROI.begin(), H_ROI.end());
-			H_MAX = *std::max_element(H_ROI.begin(), H_ROI.end());
-			cout << "MIN 'H' VALUE: " << H_MIN << endl;
-			cout << "MAX 'H' VALUE: " << H_MAX << endl;
-		}
-		if (L_ROI.size()>0) {
-			L_MIN = *std::min_element(L_ROI.begin(), L_ROI.end());
-			L_MAX = *std::max_element(L_ROI.begin(), L_ROI.end());
-			cout << "MIN 'L' VALUE: " << L_MIN << endl;
-			cout << "MAX 'L' VALUE: " << L_MAX << endl;
-		}
-		if (S_ROI.size()>0) {
-			S_MIN = *std::min_element(S_ROI.begin(), S_ROI.end());
-			S_MAX = *std::max_element(S_ROI.begin(), S_ROI.end());
-			cout << "MIN 'S' VALUE: " << S_MIN << endl;
-			cout << "MAX 'S' VALUE: " << S_MAX << endl;
-		}
-
-	}
-
-	if (mouseMove == true) {
-		//if the mouse is held down, we will draw the click and dragged rectangle to the screen
-		rectangle(frame, initialClickPoint, cv::Point(currentMousePoint.x, currentMousePoint.y), cv::Scalar(0, 255, 0), 1, 8, 0);
-	}
-
-
-}
-
-int main()
-{
-
-	Mat cameraFeed;
-	Mat greyFeed;
-	Mat hsvFeed;
-
-	Mat mask_hls;
-	Mat mask_white;
-	Mat mask_whls;
-	Mat mask_whls_image;
-	Mat gaussFeed;
-	Mat canny_edges;
-	vector<Vec4i> hough_lines;
-	Mat result;
-
-	VideoCapture capture;
-	capture.open("C:\\Ilir\\School\\361\\Videos\\20180225_131538.mp4");
-	
-	// set height and width of capture frame
-	capture.set(CV_CAP_PROP_FRAME_WIDTH, FRAME_WIDTH);
-	capture.set(CV_CAP_PROP_FRAME_HEIGHT, FRAME_HEIGHT);
-
-	int number_of_frames = 0;
-	createTrackbars();
-	
-	//Mat gray_image = cvtColor
-	while (1)
-	{
-		if (!(GetKeyState(VK_SPACE) & 1))
-		{
-			if (GetKeyState('A') & 0x8000/*check if high-order bit is set (1 << 15)*/)
-			{
-				int rewindFactor = 5;
-				if (GetKeyState('Z') & 0x8000) rewindFactor = 10;
-				capture.set(CV_CAP_PROP_POS_FRAMES, number_of_frames);
-				number_of_frames = number_of_frames - rewindFactor;
-				capture >> cameraFeed;
-			}
-			else if (GetKeyState('S') & 0x8000/*check if high-order bit is set (1 << 15)*/)
-			{
-				int fastforwardFactor = 5;
-				if (GetKeyState('X') & 0x8000) fastforwardFactor = 10;
-				capture.set(CV_CAP_PROP_POS_FRAMES, number_of_frames);
-				number_of_frames = number_of_frames + fastforwardFactor;
-				capture >> cameraFeed;
-			}
-			else if (GetKeyState('E') & 0x8000)
-			{
-				break;
-			}
-			else
-			{
-				//store image to matrix
-				if (!capture.read(cameraFeed))
-				{
-					// reset if at the end
-					capture.set(CV_CAP_PROP_POS_FRAMES, 0);
-					capture.read(cameraFeed);
-				}
-				number_of_frames = capture.get(CV_CAP_PROP_POS_FRAMES);
-			}
-		}
-
-		if (number_of_frames % 3 == 0)
-		{
-			GaussianBlur(cameraFeed, gaussFeed, Size(7, 7), 20); // helps suppress noise
-
-			// get greyscale image
-
-			cvtColor(gaussFeed, greyFeed, CV_BGR2GRAY);
-
-			
-
-			mask_hls = hlsSelect(gaussFeed, Scalar(H_MIN, L_MIN, S_MIN), Scalar(H_MAX, L_MAX, S_MAX));
-			inRange(greyFeed, 240, 255, mask_white); // get white mask
-			bitwise_or(mask_white, mask_hls, mask_whls); // get white and yellow mask combined
-			bitwise_and(greyFeed, mask_whls, mask_whls_image); // get filtered image
-
-
-			double low_threshold = 50;
-			double high_threshold = low_threshold*3;
-			Canny(mask_whls_image, canny_edges, low_threshold, high_threshold); // canny edge detection
-
-																		   // rho and theta are the distance and angular resolution of the grid in Hough space
-			double rho = 1;
-			double theta = pi / 180;
-			// threshold is minimum number of intersections in a grid for candidate line to go to output
-			int thresholdHough = 100;
-			double min_line_len = 200;
-			double max_line_gap = 200;
-			HoughLinesP(canny_edges, hough_lines, rho, theta, thresholdHough, min_line_len, max_line_gap);
-			Mat line_img(greyFeed.rows, greyFeed.cols, CV_8UC3, Scalar(0, 0, 0));
-			imshow("canny", mask_hls);
-			//int decision = process_lines(line_img, hough_lines);
-
-			// process_lines
-
-			/* workflow
-			1) examine each individual line returned by hough & determine if it's in left or right lane by its slope
-			because we are working "upside down" with the array, the left lane will have a negative slope and right positive
-			2) track extrema
-			3) compute average
-			4) solve for b intercept
-			5) use extreme to solve for points
-			6) smooth frames and cache
-			*/
-
-			static vector<double> cache = { 0, 0, 0, 0, 0, 0, 0, 0 };
-			static bool first_frame = true;
-			static int linesCrossed = 0;
-
-			int y_global_min = line_img.rows;
-			int y_max = line_img.rows;
-
-			vector<double> l_slope = {};
-			vector<double> r_slope = {};
-			vector<Vec4i> l_lane = {};
-			vector<Vec4i> r_lane = {};
-
-			static vector<Lane> lanes = {};
-
-			double det_slope = 0.5;
-			double a = 0.4;
-
-			for (int i = 0; i < hough_lines.size(); i++)
-			{
-				//1)
-				Vec4i l = hough_lines[i];
-				double slope = (double(l[3]) - double(l[1])) / (double(l[2]) - double(l[0])); // (y2-y1)/(x2-x1)
-				if (slope == std::numeric_limits<double>::infinity()) slope = (double(line_img.rows)) / 1;
-				double b = 0;
-
-				//slope = std::abs(slope);
-				//b = std::abs(b);
-				int minIndex = -1;
-				if (abs(slope) > det_slope)
-				{
-
-					// MED classifier
-					if (slope != std::numeric_limits<double>::infinity())
-					{
-						b = (slope * double(l[0]) - double(l[1])) / slope;
-						double x = (slope * b + line_img.rows) / slope;
-						double minDist = 50000;
-						for (int j = 0; j < lanes.size(); j++)
-						{
-							Lane lane = lanes[j];
-							double lx = lane.getX(line_img.rows);
-							double lB = lane.getB();
-							double dist = abs(pow(x, 2) - 2 * x*lx + pow(lx, 2) + pow(b, 2) - 2 * b*lB + pow(lB, 2));
-							if (dist < minDist)
-							{
-								minDist = dist;
-								minIndex = j;
-							}
-						}
-					}
-					else
-					{
-						b = l[0];
-						double minDist = 100;
-						for (int j = 0; j < lanes.size(); j++)
-						{
-							Lane lane = lanes[j];
-							double lB = lane.getB();
-							double dist = abs(lB - b);
-							if (dist < minDist)
-							{
-								minDist = dist;
-								minIndex = j;
-							}
-						}
-					}
-
-
-					if (minIndex >= 0) lanes[minIndex].addLane(slope, b, l[3], l[1], l[0], l[2], line_img.rows, line_img.cols);
-					else
-					{
-						Lane lane = Lane(slope, b);
-						lanes.push_back(lane);
-					}
-				}
-				line(line_img, Point(int(l[0]), int(l[1])), Point(int(l[2]), int(l[3])), Scalar(255, 0, 0), 5); //enable to display all hough lines
-
-			}
-
-			/*if (l_lane.size() == 0 || r_lane.size() == 0)
-			{
-			return -1; // no lane detected
-			}*/
-
-
-			double y1 = 0;
-			double y2 = line_img.rows;
-
-			// compute distance
-
-			// get middle x of the screen
-			double xpoint = (double)line_img.cols / 2;
-
-			//Lane* l_lane = NULL;
-			//Lane* r_lane = NULL;
-
-			double threshold = 100;
-
-			double distl = threshold * 2;
-			double distr = -threshold * 2;
-
-			lanes.erase(std::remove_if(lanes.begin(), lanes.end(), laneIsEmpty), lanes.end());
-
-			for (int i = 0; i < lanes.size(); i++)
-			{
-				Lane& lane = lanes[i];
-				double x1 = lane.getX(y1, true);
-				double x2 = lane.getX(y2, true);
-
-				if (lane.isLaneLine || x2 >= 0 || x2 <= line_img.cols)
-				{
-					if (!lane.isFullLine)
-					{
-						--lane.buffer;
-					}
-					else lane.buffer = 2;
-					if (lane.buffer == 0)
-					{
-						lane.isLaneLine = false;
-					}
-				}
-				if (lane.isLaneLine)
-				{
-					
-					line(line_img, Point(int(x1), int(y1)), Point(int(x2), int(y2)), Scalar(0, 255, 0), 5);
-
-					// get distance
-					double dist = xpoint - x2;
-
-					if (lane.lastFrame) lane.lastRight = lane.right;
-					if (dist > 0)
-					{
-						lane.right = false;
-						if (dist < distl) distl = dist;
-					}
-					else if (dist < 0)
-					{
-						lane.right = true;
-						if (dist > distr) distr = dist;
-					}
-					if (lane.lastFrame)
-					{
-						if (lane.lastRight && !lane.right) linesCrossed++;
-						else if (!lane.lastRight && lane.right) linesCrossed--;
-					}
-
-				}
-
-				lane.oldSlope = lane.getSlope(true);
-				lane.oldB = lane.getB(true);
-				lane.totalSlope = 0;
-				lane.totalB = 0;
-				lane.numberOfLanes = 0;
-				lane.isFullLine = false;
-				lane.lastFrame = true;
-
-			}
-			int decision = 0;
-			if (linesCrossed < 0) decision = 1;
-			else if (linesCrossed > 0) decision = 2;
-			if (distl < threshold) decision = 1;
-			else if (distr > -threshold) decision = 2;
-
-			//--------------------
-
-			addWeighted(line_img, 0.8, cameraFeed, 1, 0, result);
-			int font = FONT_HERSHEY_SIMPLEX;
-			string msg;
-			if (decision == 1) msg = "LEFT";
-			else if (decision == 2) msg = "RIGHT";
-			else msg = "ON TRACK";
-			putText(result, msg, Point(10, 500), font, 4, Scalar(255, 255, 255), 2, LINE_AA);
-
-			imshow("Raw", line_img);
-			imshow("Result", result);
-
-
-			waitKey(30);
-		}
-		
-	}
-
-	return 0;
-}
+//}

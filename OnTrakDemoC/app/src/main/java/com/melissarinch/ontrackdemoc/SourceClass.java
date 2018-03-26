@@ -8,8 +8,8 @@ import org.opencv.core.Mat;
 
 public class SourceClass {
 
-    public native static String processImage();
-
+    public native static String processImage(long mRgba);
+    public native static void getMat(long mRgba, long greyFeed);
 
 
     // Used to load the 'native-lib' library on application startup.

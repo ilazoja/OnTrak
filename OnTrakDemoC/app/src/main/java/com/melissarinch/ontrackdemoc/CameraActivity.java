@@ -1,10 +1,14 @@
 package com.melissarinch.ontrackdemoc;
+import android.Manifest;
+import android.content.pm.PackageManager;
 import android.os.Bundle;
+import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.MenuItem;
 import android.view.SurfaceView;
 import android.view.WindowManager;
+import android.widget.Toast;
 
 import org.opencv.android.JavaCameraView;
 import org.opencv.android.BaseLoaderCallback;
@@ -23,7 +27,7 @@ import org.opencv.imgproc.Imgproc;
  * Created by melis on 3/23/2018.
  */
 
-public class CameraActivity extends AppCompatActivity implements CvCameraViewListener2 {
+public class CameraActivity extends AppCompatActivity implements CameraBridgeViewBase.CvCameraViewListener2 {
 
         // Used for logging success or failure messages
         private static final String TAG = "OCVSample::Activity";
@@ -48,12 +52,13 @@ public class CameraActivity extends AppCompatActivity implements CvCameraViewLis
                     case LoaderCallbackInterface.SUCCESS:
                     {
                         Log.i(TAG, "OpenCV loaded successfully");
+                        System.loadLibrary("native-lib");
                         mOpenCvCameraView.enableView();
                     } break;
                     default:
                     {
                         super.onManagerConnected(status);
-                    } break;
+                    } //break;
                 }
             }
         };
@@ -72,14 +77,18 @@ public class CameraActivity extends AppCompatActivity implements CvCameraViewLis
 
             setContentView(R.layout.show_camera);
 
-            mOpenCvCameraView = (JavaCameraView) findViewById(R.id.show_camera_activity_java_surface_view);
+            // Permissions for Android 6+
+            ActivityCompat.requestPermissions(CameraActivity.this,
+                    new String[]{Manifest.permission.CAMERA},
+                    1);
+            mOpenCvCameraView = (CameraBridgeViewBase) findViewById(R.id.show_camera_activity_java_surface_view);
 
             mOpenCvCameraView.setVisibility(SurfaceView.VISIBLE);
-
             mOpenCvCameraView.setCvCameraViewListener(this);
-            mOpenCvCameraView.setMinimumHeight(400);
-            mOpenCvCameraView.setMinimumWidth(400);
-            mOpenCvCameraView.setMaxFrameSize(400, 400);
+           // mOpenCvCameraView.setCvCameraViewListener(this);
+//            mOpenCvCameraView.setMinimumHeight(400);
+//            mOpenCvCameraView.setMinimumWidth(400);
+//            mOpenCvCameraView.setMaxFrameSize(400, 400);
         }
 
         @Override
@@ -96,14 +105,36 @@ public class CameraActivity extends AppCompatActivity implements CvCameraViewLis
             super.onResume();
             if (!OpenCVLoader.initDebug()) {
                 Log.d(TAG, "Internal OpenCV library not found. Using OpenCV Manager for initialization");
-                OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_3_0_0, this, mLoaderCallback);
+                OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_3_4_0, this, mLoaderCallback);
             } else {
                 Log.d(TAG, "OpenCV library found inside package. Using it!");
                 mLoaderCallback.onManagerConnected(LoaderCallbackInterface.SUCCESS);
             }
         }
 
-        public void onDestroy() {
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String permissions[], int[] grantResults) {
+        switch (requestCode) {
+            case 1: {
+                // If request is cancelled, the result arrays are empty.
+                if (grantResults.length > 0
+                        && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    // permission was granted, yay! Do the
+                    // contacts-related task you need to do.
+                } else {
+                    // permission denied, boo! Disable the
+                    // functionality that depends on this permission.
+                    Toast.makeText(CameraActivity.this, "Permission denied to read your External storage", Toast.LENGTH_SHORT).show();
+                }
+                return;
+            }
+            // other 'case' lines to check for other
+            // permissions this app might request
+        }
+    }
+
+
+    public void onDestroy() {
             super.onDestroy();
             if (mOpenCvCameraView != null)
                 mOpenCvCameraView.disableView();
@@ -111,19 +142,19 @@ public class CameraActivity extends AppCompatActivity implements CvCameraViewLis
 
         public void onCameraViewStarted(int width, int height) {
 
-            mRgba = new Mat(height, width, CvType.CV_8UC4);
-            mRgbaF = new Mat(height, width, CvType.CV_8UC4);
-            mRgbaT = new Mat(width, width, CvType.CV_8UC4);
+//            mRgba = new Mat(height, width, CvType.CV_8UC4);
+//            mRgbaF = new Mat(height, width, CvType.CV_8UC4);
+//            mRgbaT = new Mat(width, width, CvType.CV_8UC4);
         }
 
         public void onCameraViewStopped() {
-            mRgba.release();
+          //  mRgba.release();
         }
 
     // Used to load the 'native-lib' library on application startup.
     static {
-        System.loadLibrary("native-lib");
-        System.loadLibrary("opencv_java3");
+        //System.loadLibrary("native-lib");
+       // System.loadLibrary("opencv_java3");
 
     }
         public Mat onCameraFrame(CvCameraViewFrame inputFrame) {
@@ -131,16 +162,34 @@ public class CameraActivity extends AppCompatActivity implements CvCameraViewLis
             // TODO Auto-generated method stub
             mRgba = inputFrame.rgba();
             // Rotate mRgba 90 degrees
-            Core.transpose(mRgba, mRgbaT);
-            Imgproc.resize(mRgbaT, mRgbaF, mRgbaF.size(), 0,0, 0);
-            Core.flip(mRgbaF, mRgba, 1 );
+          //  Core.transpose(mRgba, mRgbaT);
+            //Imgproc.resize(mRgbaT, mRgbaF, mRgbaF.size(), 0,0, 0);
+            //Core.flip(mRgbaF, mRgba, 1 );
 
-          String a =  SourceClass.processImage();
+//          String a =  SourceClass.processImage(mRgba.getNativeObjAddr());
+
+            Mat greyFeed = new Mat(mRgba.height(),mRgba.width(), CvType.CV_8UC4);
+            int b = mRgba.rows();
+            int c = mRgba.cols();
+            Log.i("rows", ((Integer) b).toString());
+            Log.i("cols", ((Integer) c).toString());
+            int a = 2;
+            if( mRgba.rows() > 0 && mRgba.cols()>0) {
+                SourceClass.getMat(mRgba.getNativeObjAddr(), greyFeed.getNativeObjAddr());
+            }
+
+            Log.i("Cam", ((Integer) a).toString());
+           // greyFeed.release();
 
 
-//            Log.i("cam", a);
+          //  Log.i("camera",a);
 
-            return mRgba; // This function must return
+
+                return greyFeed;
+
+
+
+             // This function must return
         }
 
 
