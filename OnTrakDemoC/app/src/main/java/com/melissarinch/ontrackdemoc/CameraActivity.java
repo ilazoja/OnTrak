@@ -86,9 +86,9 @@ public class CameraActivity extends AppCompatActivity implements CameraBridgeVie
             mOpenCvCameraView.setVisibility(SurfaceView.VISIBLE);
             mOpenCvCameraView.setCvCameraViewListener(this);
            // mOpenCvCameraView.setCvCameraViewListener(this);
-//            mOpenCvCameraView.setMinimumHeight(400);
-//            mOpenCvCameraView.setMinimumWidth(400);
-//            mOpenCvCameraView.setMaxFrameSize(400, 400);
+            mOpenCvCameraView.setMinimumHeight(400);
+            mOpenCvCameraView.setMinimumWidth(400);
+            mOpenCvCameraView.setMaxFrameSize(400, 400);
         }
 
         @Override
@@ -173,19 +173,19 @@ public class CameraActivity extends AppCompatActivity implements CameraBridgeVie
             int c = mRgba.cols();
             Log.i("rows", ((Integer) b).toString());
             Log.i("cols", ((Integer) c).toString());
-            int a = 2;
+            int dec = 9;
             if( mRgba.rows() > 0 && mRgba.cols()>0) {
-                SourceClass.getMat(mRgba.getNativeObjAddr(), greyFeed.getNativeObjAddr());
+               dec = SourceClass.processImage(mRgba.getNativeObjAddr());
             }
 
-            Log.i("Cam", ((Integer) a).toString());
+            Log.i("Cam", ((Integer) dec).toString());
            // greyFeed.release();
 
 
           //  Log.i("camera",a);
 
 
-                return greyFeed;
+                return mRgba;
 
 
 
