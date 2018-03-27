@@ -1,3 +1,7 @@
 <resources>
     <string name="app_name">OnTrakDemo2</string>
+    <string name="disconnect">Disconnect</string>
+    <string name="connect">Connect</string>
+    <string name="run">RUN</string>
+    <string name="bluetooth">Bluetooth</string>
 </resources>

@@ -3,12 +3,13 @@
 #include <iostream>
 using namespace std;
 
-
 Lane::Lane(double slope, double b)
 {
-	totalSlope += slope;
 	totalB += b;
 	numberOfLanes++;
+	lastFrame = false;
+	if (slope > 0) numberOfPosSlope++;
+	totalSlope += abs(slope);
 }
 
 Lane::Lane()
@@ -21,27 +22,34 @@ Lane::~Lane()
 
 }
 
-double Lane::getSlope()
+double Lane::getSlope(bool getCurrent)
 {
-	return totalSlope / numberOfLanes;
+	if (!lastFrame || getCurrent)
+	{
+		int factor = 1;
+		if (numberOfLanes - numberOfPosSlope > double(numberOfLanes)/2) factor = -1;
+		return factor * totalSlope / numberOfLanes;
+	}
+	else return oldSlope;
 }
 
-double Lane::getB()
+double Lane::getB(bool getCurrent)
 {
-	return totalB / numberOfLanes;
+	if (!lastFrame || getCurrent) return totalB / numberOfLanes;
+	else return oldB;
 }
 
-double Lane::getX(double y)
+double Lane::getX(double y, bool getCurrent)
 {
 	// y = mx + b
 	// (y - b)/m
-	if (getSlope() != std::numeric_limits<double>::infinity()) return (y - getSlope() * getB()) / getSlope();
-	else return getB();
+	return (getSlope(getCurrent) * getB(getCurrent) + y) / getSlope(getCurrent);
 }
 
-void Lane::addLane(double slope, double b)
+void Lane::addLane(double slope, double b, int y1, int y2, int x1, int x2, int rows, int cols)
 {
-	totalSlope += slope;
+	if (slope > 0) numberOfPosSlope++;
+	totalSlope += abs(slope);
 	totalB += b;
 	numberOfLanes++;
 }
