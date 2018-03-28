@@ -22,7 +22,8 @@
             </intent-filter>
         </activity>
         <activity android:name=".HomeActivity" />
-        <activity android:name=".DeviceList"></activity>
+        <activity android:name=".DeviceList" />
+        <activity android:name=".ArduinoCommunication"></activity>
     </application>
 
 </manifest>

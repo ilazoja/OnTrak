@@ -49,8 +49,6 @@
         android:layout_below="@+id/activity"
         android:layout_alignStart="@+id/activity" />
 
-
-
     <Button
         android:id="@+id/run"
         android:layout_width="match_parent"
@@ -76,4 +74,14 @@
         android:layout_toEndOf="@+id/activity"
         android:layout_marginBottom="26dp"
         android:layout_alignParentTop="true" />
+
+    <TextView
+        android:id="@+id/testView1"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_above="@+id/txtString"
+        android:text=""
+        android:textSize="15sp" />
+
+
 </RelativeLayout>
