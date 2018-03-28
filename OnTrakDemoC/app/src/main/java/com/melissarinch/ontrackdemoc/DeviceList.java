@@ -39,10 +39,8 @@ public class DeviceList extends Activity {
         textConnectionStatus = (TextView) findViewById(R.id.connecting);
         textConnectionStatus.setTextSize(40);
 
-        mPairedDevicesArrayAdapter = new ArrayAdapter<String>(this, R.layout.device_name);
-
         // Initialize array adapter for paired devices
-
+        mPairedDevicesArrayAdapter = new ArrayAdapter<String>(this, R.layout.device_name);
 
         // Find and set up the ListView for paired devices
         pairedListView = (ListView) findViewById(R.id.paired_devices);
