@@ -8,6 +8,8 @@ import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
 import android.widget.BaseExpandableListAdapter;
+import android.widget.Button;
+import android.widget.ImageButton;
 import android.widget.TextView;
 
 import com.melissarinch.ontrackdemoc.R;
@@ -22,107 +24,31 @@ import org.opencv.core.Mat;
 
 
 public class MainActivity extends AppCompatActivity{
-    private  JavaCameraView javaCameraView;
-    Mat mRgba;
-    Mat mGray;
-  //  BaseLoaderCallback baseLoaderCallback = new BaseLoaderCallback(this) {
-//        @Override
-//        public void onManagerConnected(int status) {
-//
-//            switch (status){
-//                case BaseLoaderCallback.SUCCESS:
-//                    javaCameraView.enableView();
-//                    break;
-//                default:
-//                    super.onManagerConnected(status);
-//                    break;
-//            }
-//        }
-//    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
        super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-//        javaCameraView = (JavaCameraView)findViewById(R.id.javaCameraView);
-//        javaCameraView.setVisibility(View.VISIBLE);
-//        javaCameraView.setCvCameraViewListener(this);
-//
-//        // Example of a call to a native method
-//        //TextView tv = (TextView) findViewById(R.id.sample_text);
-//        //tv.setText(stringFromJNI());
-        String tring = MainActivity.stringFromJNI();
-        Log.i("str", tring);
-    }
 
-//    @Override
-//    protected void onPause(){
-//        super.onPause();
-//        if(javaCameraView != null){
-//            javaCameraView.disableView();
-//        }
-//    }
-//    protected void onDestroy(){
-//        super.onDestroy();
-//        if(javaCameraView != null){
-//            javaCameraView.disableView();
-//        }
-//    }
-//    protected void onResume(){
-//        super.onResume();
-//        if(OpenCVLoader.initDebug()){
-//            Log.i("success", "OpenCV loaded successfully");
-//            baseLoaderCallback.onManagerConnected(LoaderCallbackInterface.SUCCESS);
-//        }
-//        else{
-//            Log.i("fail", "OpenCV not loaded");
-//            OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_3_4_0, this, baseLoaderCallback);
-//        }
-//    }
-//
-//    /**
-//     * A native method that is implemented by the 'native-lib' native library,
-//     * which is packaged with this application.
-//     */
-   public native static String stringFromJNI();
+        Button toHome = (Button)findViewById(R.id.start);
 
-
-
-
-    // Used to load the 'native-lib' library on application startup.
-    static {
-        System.loadLibrary("native-lib");
-        System.loadLibrary("opencv_java3");
+        toHome.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                try {
+                    Intent intent = new Intent(getApplicationContext(), HomeActivity.class);
+                    startActivity(intent);
+                }catch (Exception e){
+                    e.printStackTrace();
+                }
+            }
+        });
 
     }
-    public void toCamera(View v){
-        Intent intent = new Intent(this, CameraActivity.class);
-        startActivity(intent);
 
-    }
-//
-//    public void openCamera(){
-//
+//    static {
+//        System.loadLibrary("native-lib");
+//        System.loadLibrary("opencv_java3");
 //    }
-//
-//    @Override
-//    public void onCameraViewStarted(int width, int height) {
-//        mRgba = new Mat(height, width, CvType.CV_8UC4);
-//    }
-//
-//    @Override
-//    public void onCameraViewStopped() {
-//
-//    }
-//
-//    @Override
-//    public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
-//        mRgba = inputFrame.rgba();
-//
-//        NativeClass.convertGray(mRgba.getNativeObjAddr(), mGray.getNativeObjAddr());
-//        NativeClass.ProcessImage();
-//        return mGray;
-//    }
-
 
 }

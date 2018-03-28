@@ -8,7 +8,7 @@ import org.opencv.core.Mat;
 
 public class SourceClass {
 
-    public native static int processImage(long mRgba);
+    public native static int processImage(long mRgba, long line, long mask);
     public native static void getMat(long mRgba, long greyFeed);
 
 

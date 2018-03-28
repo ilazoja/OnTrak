@@ -20,12 +20,12 @@ const int FRAME_WIDTH = 640;
 const int FRAME_HEIGHT = 480;
 //initial min and max HSV filter values.
 //these will be changed using trackbars
-int H_MIN = 137;
-int H_MAX = 256;
+int H_MIN = 26;
+int H_MAX = 100;
 int L_MIN = 0; //0 //121
-int L_MAX = 256;
-int S_MIN = 96; //96 //0
-int S_MAX = 256;
+int L_MAX = 265;
+int S_MIN = 0; //96 //0
+int S_MAX = 265;
 
 void on_trackbar(int, void*)
 {//This function gets called whenever a
@@ -43,99 +43,6 @@ bool laneIsEmpty(Lane lane)
 int process_lines(Mat img, vector<Vec4i> lines, Scalar color = Scalar(255, 0, 0), int thickness = 5)
 {
 	return 0;
-}
-
-// Sobel gradients - Canny edeg detection combines the sobel gradient for both x and y. By breaking it apart into its compoennts, we can produce a refined version of Canny edge detection
-Mat absSobelThresh(Mat img, char orient = 'x', int threshLow = 0, int threshHigh = 255)
-{
-	Mat grey;
-	Mat scaled_abs_sobel;
-	// Convert to grayscale
-	cvtColor(img, grey, COLOR_RGB2GRAY);
-
-	//Apply x or y gradient with the OpenCV Sobel() function and take the absolute value
-	if (orient == 'x') 
-	{
-		Mat sobel;
-		Sobel(grey, sobel, CV_64F, 1, 0);
-		convertScaleAbs(sobel, scaled_abs_sobel);
-	}
-	else if (orient == 'y')
-	{
-		Mat sobel;
-		Sobel(grey, sobel, CV_64F, 0, 1);
-		convertScaleAbs(sobel, scaled_abs_sobel); // gets abs and rescale to 8 uint
-	}
-
-	// apply the threshold
-	Mat binary_output;
-	inRange(scaled_abs_sobel, threshLow, threshHigh, binary_output);
-	return binary_output;
-
-}
-
-// Gradient magnitude - This function will filter based on min/max magnitude for the gradient. This function looks at the combined xy gradient
-// but also could be altered to filter on the magnitude in a single direction, or some linear combination of the two
-Mat magThreshold(Mat img, int sobel_kernel = 3, int threshLow = 0, int threshHigh = 255)
-{
-	Mat grey;
-	Mat x;
-	Mat y;
-	Mat abs_x;
-	Mat abs_y;
-	Mat grad;
-	Mat binary_output;
-
-	// 1) Convert to grayscale
-	cvtColor(img, grey, COLOR_RGB2GRAY);
-
-	// 2) Take the gradient in x and y separately
-	Sobel(grey, x, CV_64F, 1, 0, sobel_kernel);
-	Sobel(grey, y, CV_64F, 0, 1, sobel_kernel);
-
-	// 3) Gets abs and scale to uint8
-	convertScaleAbs(x, abs_x);
-	convertScaleAbs(y, abs_y);
-
-	// 4) Approximate gradient by adding both directional gradients
-	addWeighted(abs_x, 0.5, abs_y, 0.5, 0, grad);
-
-	// 5) apply threshold
-	inRange(grad, threshLow, threshHigh, binary_output);
-
-	return binary_output;
-}
-
-// Gradient Direction - This function will filter based on the direction of the gradient. 
-// For lane detection, we will be interested in vertical linse that are +/0 some threshold near pi/2
-Mat dirThreshold(Mat img, int sobel_kernel = 3, int threshLow = 0, int threshHigh = pi/2)
-{
-	Mat grey;
-	Mat x;
-	Mat y;
-	Mat abs_x;
-	Mat abs_y;
-	Mat direction;
-	Mat binary_output;
-
-	// 1) Convert to grayscale
-	cvtColor(img, grey, COLOR_RGB2GRAY);
-
-	// 2) Take the gradient in x and y separately
-	Sobel(grey, x, CV_64F, 1, 0, sobel_kernel);
-	Sobel(grey, y, CV_64F, 0, 1, sobel_kernel);
-	
-	// 3) Gets abs
-	abs_x = abs(x);
-	abs_y = abs(y);
-
-	// 4) calculate direction of gradient
-	phase(abs_x, abs_y, direction);
-
-	// 5) threshold direction
-	inRange(direction, threshLow, threshHigh, binary_output);
-
-	return binary_output;
 }
 
 // Saturation Channel & Red Channel Filters
@@ -156,52 +63,8 @@ Mat hlsSelect(Mat img, Scalar threshLow = Scalar(0, 0, 0), Scalar threshHigh = S
 	return binary_output;
 }
 
-Mat redSelect(Mat img, int lowThresh = 0, int highThresh = 255)
+void update_line(Mat img, int lowerXBound, int lowerYBound, Mat& line_img, vector<Lane>& lanes)
 {
-	Mat binary_output;
-	inRange(img, Scalar(lowThresh, 0, 0), Scalar(highThresh, 255, 255), binary_output);
-	return binary_output;
-}
-
-/// Combining Filter Methods
-// Mix and match different filter methods, each with unique threshold values, to get a refined binary image
-Mat binaryPipeline(Mat img)
-{
-	Mat img_blur;
-	GaussianBlur(img, img_blur, Size(9,9), 21);
-
-	// color channels
-	Mat s_binary = hlsSelect(img_blur, Scalar(0, 120, 140), Scalar(255, 255, 255));
-	// red_binary = redSelect(img_blur, 200, 255);
-	// Sobel x
-	Mat x_binary = absSobelThresh(img_blur, 'x', 25, 200);
-	Mat y_binary = absSobelThresh(img_blur, 'y', 25, 200);
-
-	// Magnitude & Direction
-	Mat mag_binary = magThreshold(img_blur, 3, 30, 100);
-	Mat dir_binary = dirThreshold(img_blur, 3, 0.8, 1.2);
-
-	// Stack each channel
-	Mat final_binary;
-	Mat gradient;
-	Mat xy_binary;
-	bitwise_and(x_binary, y_binary, xy_binary);
-	Mat magdir_binary;
-	bitwise_and(mag_binary, dir_binary, magdir_binary);
-	bitwise_or(xy_binary, magdir_binary, gradient);
-	bitwise_or(s_binary, gradient, final_binary);
-
-	return final_binary;
-
-	
-}
-extern "C"
-JNIEXPORT jint JNICALL
-Java_com_melissarinch_ontrackdemoc_SourceClass_processImage(JNIEnv *env, jobject instance, jlong mRgba){
-//int processImage(Mat matAddrRgba) {
-
-
-    Mat &cameraFeed = *(Mat*)mRgba;
     Mat greyFeed;
     Mat hsvFeed;
 
@@ -214,32 +77,20 @@ Java_com_melissarinch_ontrackdemoc_SourceClass_processImage(JNIEnv *env, jobject
     vector<Vec4i> hough_lines;
     Mat result;
 
-
-
-    int number_of_frames = 0;
-
-    //Mat gray_image = cvtColor
-   // while (1) {
-
-
-    GaussianBlur(cameraFeed, gaussFeed, Size(7, 7), 20); // helps suppress noise
+    //GaussianBlur(img, gaussFeed, Size(23, 23), 100); // helps suppress noise
 
     // get greyscale image
 
-    cvtColor(gaussFeed, greyFeed, CV_BGR2GRAY);
+    cvtColor(img, greyFeed, CV_BGR2GRAY);
 
+    mask_hls = hlsSelect(img, Scalar(H_MIN, L_MIN, S_MIN), Scalar(H_MAX, L_MAX, S_MAX));
+    //inRange(greyFeed, 200, 255, mask_white); // get white mask
+    //bitwise_or(mask_white, mask_hls mask_whls); // get white and yellow mask combined
+    bitwise_and(greyFeed, mask_hls, mask_whls_image); // get filtered image
 
-    mask_hls = hlsSelect(gaussFeed, Scalar(H_MIN, L_MIN, S_MIN),
-                         Scalar(H_MAX, L_MAX, S_MAX));
-    inRange(greyFeed, 240, 255, mask_white); // get white mask
-    bitwise_or(mask_white, mask_hls, mask_whls); // get white and yellow mask combined
-    bitwise_and(greyFeed, mask_whls, mask_whls_image); // get filtered image
-
-
-    double low_threshold = 50;
+    double low_threshold = 100;
     double high_threshold = low_threshold * 3;
-    Canny(mask_whls_image, canny_edges, low_threshold,
-          high_threshold); // canny edge detection
+    Canny(mask_whls_image, canny_edges, low_threshold, high_threshold); // canny edge detection
 
     // rho and theta are the distance and angular resolution of the grid in Hough space
     double rho = 1;
@@ -248,10 +99,10 @@ Java_com_melissarinch_ontrackdemoc_SourceClass_processImage(JNIEnv *env, jobject
     int thresholdHough = 100;
     double min_line_len = 200;
     double max_line_gap = 200;
-    HoughLinesP(canny_edges, hough_lines, rho, theta, thresholdHough, min_line_len,
-                max_line_gap);
-    Mat line_img(greyFeed.rows, greyFeed.cols, CV_8UC3, Scalar(0, 0, 0));
-    //imshow("canny", mask_hls);
+    HoughLinesP(canny_edges, hough_lines, rho, theta, thresholdHough, min_line_len, max_line_gap);
+
+
+    //imshow("canny", mask_whls);
     //int decision = process_lines(line_img, hough_lines);
 
     // process_lines
@@ -266,82 +117,220 @@ Java_com_melissarinch_ontrackdemoc_SourceClass_processImage(JNIEnv *env, jobject
     6) smooth frames and cache
     */
 
-    static vector<double> cache = {0, 0, 0, 0, 0, 0, 0, 0};
-    static bool first_frame = true;
-    static int linesCrossed = 0;
-
     int y_global_min = line_img.rows;
     int y_max = line_img.rows;
-
-    vector<double> l_slope = {};
-    vector<double> r_slope = {};
-    vector<Vec4i> l_lane = {};
-    vector<Vec4i> r_lane = {};
-
-    static vector<Lane> lanes = {};
 
     double det_slope = 0.5;
     double a = 0.4;
 
-    for (int i = 0; i < hough_lines.size(); i++) {
+    for (int i = 0; i < hough_lines.size(); i++)
+    {
         //1)
         Vec4i l = hough_lines[i];
-        double slope = (double(l[3]) - double(l[1])) /
-                       (double(l[2]) - double(l[0])); // (y2-y1)/(x2-x1)
-        if (slope == std::numeric_limits<double>::infinity())
-            slope = (double(line_img.rows)) / 1;
+        l[0] = l[0] + lowerXBound;
+        l[1] = l[1] + lowerYBound;
+        l[2] = l[2] + lowerXBound;
+        l[3] = l[3] + lowerYBound;
+        if (l[2] - l[0] == 0) l[2] = l[2] + 1;
+        double slope = (double(l[3]) - double(l[1])) / (double(l[2]) - double(l[0])); // (y2-y1)/(x2-x1)
         double b = 0;
 
         //slope = std::abs(slope);
         //b = std::abs(b);
         int minIndex = -1;
-        if (abs(slope) > det_slope) {
-
+        if (abs(slope) > det_slope)
+        {
             // MED classifier
-            if (slope != std::numeric_limits<double>::infinity()) {
-                b = (slope * double(l[0]) - double(l[1])) / slope;
-                double x = (slope * b + line_img.rows) / slope;
-                double minDist = 50000;
-                for (int j = 0; j < lanes.size(); j++) {
-                    Lane lane = lanes[j];
-                    double lx = lane.getX(line_img.rows);
-                    double lB = lane.getB();
-                    double dist = abs(
-                            pow(x, 2) - 2 * x * lx + pow(lx, 2) + pow(b, 2) - 2 * b * lB +
-                            pow(lB, 2));
-                    if (dist < minDist) {
-                        minDist = dist;
-                        minIndex = j;
-                    }
-                }
-            } else {
-                b = l[0];
-                double minDist = 100;
-                for (int j = 0; j < lanes.size(); j++) {
-                    Lane lane = lanes[j];
-                    double lB = lane.getB();
-                    double dist = abs(lB - b);
-                    if (dist < minDist) {
-                        minDist = dist;
-                        minIndex = j;
-                    }
+
+            b = (slope * double(l[0]) - double(l[1])) / slope;
+            double x = (slope * b + line_img.rows) / slope;
+            double minDist = 65000;
+
+            for (int j = 0; j < lanes.size(); j++)
+            {
+                Lane lane = lanes[j];
+                double lx = lane.getX(line_img.rows);
+                double lB = lane.getB();
+                double dist = abs(pow(x, 2) - 2 * x*lx + pow(lx, 2) + pow(b, 2) - 2 * b*lB + pow(lB, 2));
+                if (dist < minDist)
+                {
+                    minDist = dist;
+                    minIndex = j;
                 }
             }
 
-
-            if (minIndex >= 0)
-                lanes[minIndex].addLane(slope, b, l[3], l[1], l[0], l[2], line_img.rows,
-                                        line_img.cols);
-            else {
+            if (minIndex >= 0) lanes[minIndex].addLane(slope, b, l[3], l[1], l[0], l[2], line_img.rows, line_img.cols);
+            else
+            {
                 Lane lane = Lane(slope, b);
                 lanes.push_back(lane);
             }
         }
-        line(line_img, Point(int(l[0]), int(l[1])), Point(int(l[2]), int(l[3])),
-             Scalar(255, 0, 0), 5); //enable to display all hough lines
-
+        line(line_img, Point(int(l[0]), int(l[1])), Point(int(l[2]), int(l[3])), Scalar(255, 0, 0), 5); //enable to display all hough lines
     }
 
+}
+
+bool find_obstacles(Mat img)
+{
+    Mat greyFeed;
+    Mat hsvFeed;
+
+    Mat mask_hls;
+    Mat mask_white;
+    Mat mask_whls;
+    Mat mask_whls_image;
+    Mat gaussFeed;
+    Mat canny_edges;
+    vector<Vec4i> hough_lines;
+    Mat result;
+    vector<vector<Point>> contours;
+    vector<Vec4i> hierarchy;
+
+    GaussianBlur(img, gaussFeed, Size(23, 23), 100); // helps suppress noise
+
+    // get greyscale image
+
+    cvtColor(gaussFeed, greyFeed, CV_BGR2GRAY);
+
+    mask_hls = hlsSelect(gaussFeed, Scalar(0, 117, 0), Scalar(60, 256, 256));
+    inRange(greyFeed, 200, 255, mask_white); // get white mask
+    bitwise_not(mask_white, mask_white);
+    bitwise_and(mask_white, mask_hls, mask_whls); // get white and yellow mask combined
+    bitwise_and(greyFeed, mask_whls, mask_whls_image); // get filtered image
+
+    double low_threshold = 100;
+    double high_threshold = low_threshold * 3;
+    Canny(mask_whls_image, canny_edges, low_threshold, high_threshold); // canny edge detection
+
+    //findContours(canny_edges, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, Point(0, 0));
+
+    /// Draw contours
+    //Mat drawing = Mat::zeros(canny_edges.size(), CV_8UC3);
+    //for (int i = 0; i< contours.size(); i++)
+    //{
+    //	Scalar color = Scalar(rng.uniform(0, 255), rng.uniform(0, 255), rng.uniform(0, 255));
+    //	drawContours(drawing, contours, i, color, 2, 8, hierarchy, 0, Point());
+    //}
+    vector<Point> white_pixels;
+    findNonZero(canny_edges, white_pixels);
+    int threshold = 400;
+    //imshow("obstacle", canny_edges);
+    return white_pixels.size() > threshold;
+}
+
+extern "C"
+JNIEXPORT jint JNICALL
+Java_com_melissarinch_ontrackdemoc_SourceClass_processImage(JNIEnv *env, jobject instance, jlong mRgba, jlong line1, jlong mask_hl){
+//int processImage(Mat matAddrRgba) {
+
+
+    Mat &cameraFeed = *(Mat*)mRgba;
+    bool detectObjects = false;
+
+    Mat result;
+
+    static bool started = false;
+    static int linesCrossed = 0;
+
+    int searchRange = 200;
+    static bool obstacleDetectedLastFrame = false;
+    static bool obstacleDetectedCurrentFrame = false;
+    Mat &line_img = *(Mat*)line1;
+
+    int decision = 0;
+
+    static vector<Lane> lanes = {};
+
+    if (detectObjects)
+    {
+        obstacleDetectedLastFrame = obstacleDetectedCurrentFrame;
+        obstacleDetectedCurrentFrame = find_obstacles(cameraFeed(Range(0, line_img.rows / 2), Range(line_img.cols / 4, line_img.cols * 3 / 4)));
+        if (obstacleDetectedCurrentFrame && !obstacleDetectedLastFrame) linesCrossed--;
+        if (!obstacleDetectedCurrentFrame && obstacleDetectedLastFrame) linesCrossed++;
+    }
+
+    if (!started || lanes.size() == 0 || true)
+    {
+        Mat sub_img = cameraFeed(Range(cameraFeed.rows/2, cameraFeed.rows), Range(0, cameraFeed.cols));
+        update_line(sub_img, cameraFeed.rows/2, 0, line_img, lanes);
+    }
+    else
+    {
+        bool lookedAtLeftBound = false;
+        bool lookedAtRightBound = false;
+        int lowerCheckBound = line_img.cols - searchRange;
+        int higherCheckBound = searchRange;
+        for (int j = 0; j < lanes.size(); j++)
+        {
+            Lane& lane = lanes[j];
+            int lowerBound;
+            int higherBound;
+
+            if (lane.getSlope() < 0)
+            {
+                lowerBound = lane.getX(line_img.rows) - searchRange;
+                if (lowerBound < 0 || lowerBound < line_img.cols)
+                {
+                    lowerBound = 0;
+                    if (lane.getX(line_img.rows) > 0)
+                    {
+                        higherCheckBound = std::min((int)lane.getX(line_img.rows), higherCheckBound);
+                        lookedAtLeftBound = true;
+                    }
+
+                }
+                higherBound = (int)lane.getX(line_img.rows / 2) + searchRange;
+                if (higherBound > line_img.cols || higherBound < 0)
+                {
+                    higherBound = line_img.cols;
+                    if (lane.getX(line_img.rows / 2) < line_img.cols)
+                    {
+                        lowerCheckBound = std::max((int)lane.getX(line_img.rows / 2), lowerCheckBound);
+                        lookedAtRightBound = true;
+                    }
+                }
+            }
+            else if (lane.getSlope() > 0)
+            {
+                lowerBound = (int)lane.getX(line_img.rows / 2) - searchRange;
+                if (lowerBound < 0 || lowerBound < line_img.cols)
+                {
+                    lowerBound = 0;
+                    if (lane.getX(line_img.rows / 2) > 0)
+                    {
+                        higherCheckBound = std::min((int)lane.getX(line_img.rows / 2), higherCheckBound);
+                        lookedAtLeftBound = true;
+                    }
+                }
+                higherBound = lane.getX(line_img.rows) + searchRange;
+                if (higherBound > line_img.cols || higherBound < 0)
+                {
+                    higherBound = line_img.cols;
+                    if (lane.getX(line_img.rows) < line_img.cols) {
+                        lowerCheckBound = std::max((int)lane.getX(line_img.rows), lowerCheckBound);
+                        lookedAtRightBound = true;
+                    }
+                }
+            }
+
+            Mat sub_img = cameraFeed(Range(line_img.rows/2, line_img.rows), Range(lowerBound, higherBound));
+            update_line(sub_img, lowerBound, line_img.rows/2, line_img, lanes);
+
+        }
+        if (!lookedAtLeftBound)
+        {
+            Mat sub_img = cameraFeed(Range(line_img.rows / 2, line_img.rows), Range(0, higherCheckBound));
+            update_line(sub_img, 0, line_img.rows / 2, line_img, lanes);
+        }
+        if (!lookedAtRightBound)
+        {
+            Mat sub_img = cameraFeed(Range(line_img.rows / 2, line_img.rows), Range(lowerCheckBound, line_img.cols));
+            update_line(sub_img, line_img.cols - searchRange, line_img.rows / 2, line_img, lanes);
+        }
+    }
+
+    if (lanes.size() > 1) started = true;
     /*if (l_lane.size() == 0 || r_lane.size() == 0)
     {
     return -1; // no lane detected
@@ -349,53 +338,92 @@ Java_com_melissarinch_ontrackdemoc_SourceClass_processImage(JNIEnv *env, jobject
 
 
     double y1 = 0;
-    double y2 = line_img.rows;
+    double y2 = cameraFeed.rows;
+    double y3 = cameraFeed.rows * 1000;
 
     // compute distance
 
     // get middle x of the screen
-    double xpoint = (double) line_img.cols / 2;
+    double xpoint = (double)cameraFeed.cols / 2;
 
     //Lane* l_lane = NULL;
     //Lane* r_lane = NULL;
 
-    double threshold = 100;
+    double threshold = 150;
 
-    double distl = threshold * 2;
-    double distr = -threshold * 2;
+    double distl = 1000000;
+    double distr = -1000000;
+    int leftLaneIndex = -1;
+    int rightLaneIndex = -1;
+
+    int rightLaneClosestIndex = -1;
+    int leftLaneClosestIndex = -1;
+    double distlFromUser = line_img.cols;
+    double distrFromUser = -line_img.cols;
 
     lanes.erase(std::remove_if(lanes.begin(), lanes.end(), laneIsEmpty), lanes.end());
-
-    for (int i = 0; i < lanes.size(); i++) {
-        Lane &lane = lanes[i];
+    for (int i = 0; i < lanes.size(); i++)
+    {
+        Lane& lane = lanes[i];
         double x1 = lane.getX(y1, true);
         double x2 = lane.getX(y2, true);
+        double x3 = lane.getX(y3, true);
 
-        if (lane.isLaneLine || x2 >= 0 || x2 <= line_img.cols) {
-            if (!lane.isFullLine) {
-                --lane.buffer;
-            } else lane.buffer = 2;
-            if (lane.buffer == 0) {
-                lane.isLaneLine = false;
-            }
-        }
-        if (lane.isLaneLine) {
+        //if (lane.isLaneLine || x2 >= 0 || x2 <= cameraFeed.cols)
+        //{
+        //	if (!lane.isFullLine)
+        //	{
+        //		--lane.buffer;
+        //	}
+        //	else lane.buffer = 2;
+        //	if (lane.buffer == 0)
+        //	{
+        //		lane.isLaneLine = false;
+        //	}
+        //}
+        if (lane.isLaneLine)
+        {
 
-            line(line_img, Point(int(x1), int(y1)), Point(int(x2), int(y2)),
-                 Scalar(0, 255, 0), 5);
+            line(line_img, Point(int(x1), int(y1)), Point(int(x2), int(y2)), Scalar(0, 255, 0), 5);
 
             // get distance
+            double distExtend = xpoint - x3;
             double dist = xpoint - x2;
 
             if (lane.lastFrame) lane.lastRight = lane.right;
-            if (dist > 0) {
+            if (distExtend > 0)
+            {
                 lane.right = false;
-                if (dist < distl) distl = dist;
-            } else if (dist < 0) {
-                lane.right = true;
-                if (dist > distr) distr = dist;
+                if (distExtend < distl) {
+                    distl = distExtend;
+                    leftLaneIndex = i;
+                }
             }
-            if (lane.lastFrame) {
+            else if (distExtend < 0)
+            {
+                lane.right = true;
+                if (distExtend > distr) {
+                    distr = distExtend;
+                    rightLaneIndex = i;
+                }
+            }
+            if (dist > 0)
+            {
+                if (dist < distlFromUser) {
+                    distlFromUser = dist;
+                    leftLaneClosestIndex = i;
+
+                }
+            }
+            else if (dist < 0)
+            {
+                if (dist > distrFromUser) {
+                    distrFromUser = dist;
+                    rightLaneClosestIndex = i;
+                }
+            }
+            if (lane.lastFrame)
+            {
                 if (lane.lastRight && !lane.right) linesCrossed++;
                 else if (!lane.lastRight && lane.right) linesCrossed--;
             }
@@ -407,19 +435,32 @@ Java_com_melissarinch_ontrackdemoc_SourceClass_processImage(JNIEnv *env, jobject
         lane.totalSlope = 0;
         lane.totalB = 0;
         lane.numberOfLanes = 0;
+        lane.numberOfPosSlope = 0;
         lane.isFullLine = false;
         lane.lastFrame = true;
 
     }
-    int decision = 0;
-    if (linesCrossed < 0) decision = 1;
-    else if (linesCrossed > 0) decision = 2;
-    if (distl < threshold) decision = 1;
-    else if (distr > -threshold) decision = 2;
+    if (leftLaneClosestIndex != leftLaneIndex && leftLaneClosestIndex > -1 && leftLaneIndex > -1)
+    {
+        distlFromUser = (double)cameraFeed.cols / 2 - lanes[leftLaneIndex].getX(line_img.rows, true);
+        lanes[leftLaneClosestIndex].isLaneLine = false;
+    }
+    if (rightLaneClosestIndex != rightLaneIndex && rightLaneClosestIndex > -1 && rightLaneIndex > -1)
+    {
+        distrFromUser = (double)cameraFeed.cols / 2 - lanes[rightLaneIndex].getX(line_img.rows, true);
+        lanes[rightLaneClosestIndex].isLaneLine = false;
+    }
+    if (!started) decision = 3;
+    else if (linesCrossed < 0) decision = 2;
+    else if (linesCrossed > 0) decision = 1;
+    else if (distlFromUser < threshold) decision = 1;
+    else if (distrFromUser > -threshold) decision = 2;
+    else decision = 0;
 
+    return decision;
     //--------------------
 
-   // addWeighted(line_img, 0.8, cameraFeed, 1, 0, result);
+    //addWeighted(line_img, 0.8, cameraFeed, 1, 0, result);
    // int font = FONT_HERSHEY_SIMPLEX;
    // string msg;
    // if (decision == 1) msg = "LEFT";
@@ -429,12 +470,13 @@ Java_com_melissarinch_ontrackdemoc_SourceClass_processImage(JNIEnv *env, jobject
 
     //imshow("Raw", line_img);
     //imshow("Result", result);
-    return decision;
+
+    //Mat gray_image = cvtColor
+   // while (1) {
+    // get greyscale image
 
 
-  //  }
 
-   // std::string hello = "Hello +";
 }
 extern "C"
 JNIEXPORT void JNICALL

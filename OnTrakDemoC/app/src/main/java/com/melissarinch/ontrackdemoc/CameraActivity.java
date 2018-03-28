@@ -20,6 +20,7 @@ import org.opencv.android.OpenCVLoader;
 import org.opencv.core.Core;
 import org.opencv.core.CvType;
 import org.opencv.core.Mat;
+import org.opencv.core.Scalar;
 import org.opencv.imgproc.Imgproc;
 
 
@@ -88,7 +89,7 @@ public class CameraActivity extends AppCompatActivity implements CameraBridgeVie
            // mOpenCvCameraView.setCvCameraViewListener(this);
             mOpenCvCameraView.setMinimumHeight(400);
             mOpenCvCameraView.setMinimumWidth(400);
-            mOpenCvCameraView.setMaxFrameSize(400, 400);
+            mOpenCvCameraView.setMaxFrameSize(540, 960);
         }
 
         @Override
@@ -142,9 +143,9 @@ public class CameraActivity extends AppCompatActivity implements CameraBridgeVie
 
         public void onCameraViewStarted(int width, int height) {
 
-//            mRgba = new Mat(height, width, CvType.CV_8UC4);
-//            mRgbaF = new Mat(height, width, CvType.CV_8UC4);
-//            mRgbaT = new Mat(width, width, CvType.CV_8UC4);
+           mRgba = new Mat(height, width, CvType.CV_8UC4);
+            mRgbaF = new Mat(height, width, CvType.CV_8UC4);
+            mRgbaT = new Mat(width, width, CvType.CV_8UC4);
         }
 
         public void onCameraViewStopped() {
@@ -152,30 +153,28 @@ public class CameraActivity extends AppCompatActivity implements CameraBridgeVie
         }
 
     // Used to load the 'native-lib' library on application startup.
-    static {
-        //System.loadLibrary("native-lib");
-       // System.loadLibrary("opencv_java3");
 
-    }
         public Mat onCameraFrame(CvCameraViewFrame inputFrame) {
 
             // TODO Auto-generated method stub
             mRgba = inputFrame.rgba();
             // Rotate mRgba 90 degrees
-          //  Core.transpose(mRgba, mRgbaT);
-            //Imgproc.resize(mRgbaT, mRgbaF, mRgbaF.size(), 0,0, 0);
-            //Core.flip(mRgbaF, mRgba, 1 );
+           Core.transpose(mRgba, mRgbaT);
+            Imgproc.resize(mRgbaT, mRgbaF, mRgbaF.size(), 0,0, 0);
+            Core.flip(mRgbaF, mRgba, 1 );
 
 //          String a =  SourceClass.processImage(mRgba.getNativeObjAddr());
 
-            Mat greyFeed = new Mat(mRgba.height(),mRgba.width(), CvType.CV_8UC4);
+            Mat greyFeed = new Mat(mRgba.rows(),mRgba.cols(), CvType.CV_8UC4);
+            Mat line = new Mat(mRgba.rows(),mRgba.cols(), CvType.CV_8UC4, new Scalar(0, 0, 0));
+            Mat mask = new Mat(mRgba.rows()/2,mRgba.cols(), CvType.CV_8UC4, new Scalar(0, 0, 0));
             int b = mRgba.rows();
             int c = mRgba.cols();
             Log.i("rows", ((Integer) b).toString());
             Log.i("cols", ((Integer) c).toString());
             int dec = 9;
             if( mRgba.rows() > 0 && mRgba.cols()>0) {
-               dec = SourceClass.processImage(mRgba.getNativeObjAddr());
+               dec = SourceClass.processImage(mRgba.getNativeObjAddr(), line.getNativeObjAddr(), mask.getNativeObjAddr());
             }
 
             Log.i("Cam", ((Integer) dec).toString());
@@ -185,7 +184,7 @@ public class CameraActivity extends AppCompatActivity implements CameraBridgeVie
           //  Log.i("camera",a);
 
 
-                return mRgba;
+                return line;
 
 
 
