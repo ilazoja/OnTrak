@@ -35,6 +35,7 @@ public class CameraActivity extends AppCompatActivity implements CameraBridgeVie
 
         // Loads camera view of OpenCV for us to use. This lets us see using OpenCV
         private CameraBridgeViewBase mOpenCvCameraView;
+        private   ArduinoCommunication ar;
 
         // Used in Camera selection from menu (when implemented)
         private boolean              mIsJavaCamera = true;
@@ -90,6 +91,7 @@ public class CameraActivity extends AppCompatActivity implements CameraBridgeVie
             mOpenCvCameraView.setMinimumHeight(400);
             mOpenCvCameraView.setMinimumWidth(400);
             mOpenCvCameraView.setMaxFrameSize(540, 960);
+           // ar = new ArduinoCommunication();
         }
 
         @Override
@@ -175,6 +177,8 @@ public class CameraActivity extends AppCompatActivity implements CameraBridgeVie
             int dec = 9;
             if( mRgba.rows() > 0 && mRgba.cols()>0) {
                dec = SourceClass.processImage(mRgba.getNativeObjAddr(), line.getNativeObjAddr(), mask.getNativeObjAddr());
+
+                //ar.sendData(((Integer) dec).toString());
             }
 
             Log.i("Cam", ((Integer) dec).toString());

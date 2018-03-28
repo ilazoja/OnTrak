@@ -18,6 +18,8 @@
         </activity>
         <activity android:name=".HomeActivity"/>
         <activity android:name=".CameraActivity"/>
+        <activity android:name=".DeviceList"/>
+        <activity android:name=".ArduinoCommunication"/>
     </application>
 
     <supports-screens android:resizeable="true"
@@ -31,6 +33,10 @@
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false"/>
     <uses-feature android:name="android.hardware.camera.front" android:required="false"/>
     <uses-feature android:name="android.hardware.camera.front.autofocus" android:required="false"/>
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
 
 
 </manifest>
