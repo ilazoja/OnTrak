@@ -161,7 +161,7 @@ public class CameraActivity extends AppCompatActivity implements CameraBridgeVie
             // TODO Auto-generated method stub
             mRgba = inputFrame.rgba();
             // Rotate mRgba 90 degrees
-           Core.transpose(mRgba, mRgbaT);
+            Core.transpose(mRgba, mRgbaT);
             Imgproc.resize(mRgbaT, mRgbaF, mRgbaF.size(), 0,0, 0);
             Core.flip(mRgbaF, mRgba, 1 );
 
@@ -169,7 +169,7 @@ public class CameraActivity extends AppCompatActivity implements CameraBridgeVie
 
             Mat greyFeed = new Mat(mRgba.rows(),mRgba.cols(), CvType.CV_8UC4);
             Mat line = new Mat(mRgba.rows(),mRgba.cols(), CvType.CV_8UC4, new Scalar(0, 0, 0));
-            Mat mask = new Mat(mRgba.rows()/2,mRgba.cols(), CvType.CV_8UC4, new Scalar(0, 0, 0));
+            Mat mask = new Mat(mRgba.rows(),mRgba.cols(), CvType.CV_8UC4, new Scalar(0, 0, 0));
             int b = mRgba.rows();
             int c = mRgba.cols();
             Log.i("rows", ((Integer) b).toString());

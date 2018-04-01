@@ -21,8 +21,8 @@ const int FRAME_HEIGHT = 480;
 //initial min and max HSV filter values.
 //these will be changed using trackbars
 int H_MIN = 26;
-int H_MAX = 100;
-int L_MIN = 0; //0 //121
+int H_MAX = 83;
+int L_MIN = 121; //0 //121
 int L_MAX = 265;
 int S_MIN = 0; //96 //0
 int S_MAX = 265;
@@ -36,7 +36,7 @@ void on_trackbar(int, void*)
 
 bool laneIsEmpty(Lane lane)
 {
-	if (lane.numberOfLanes < 2) return true;
+	if (lane.numberOfLanes < 1) return true;
 	else return false;
 }
 
@@ -63,7 +63,7 @@ Mat hlsSelect(Mat img, Scalar threshLow = Scalar(0, 0, 0), Scalar threshHigh = S
 	return binary_output;
 }
 
-void update_line(Mat img, int lowerXBound, int lowerYBound, Mat& line_img, vector<Lane>& lanes)
+void update_line(Mat img, int lowerXBound, int lowerYBound, Mat& line_img, vector<Lane>& lanes, Mat& mask_whls_image)
 {
     Mat greyFeed;
     Mat hsvFeed;
@@ -71,7 +71,7 @@ void update_line(Mat img, int lowerXBound, int lowerYBound, Mat& line_img, vecto
     Mat mask_hls;
     Mat mask_white;
     Mat mask_whls;
-    Mat mask_whls_image;
+   // Mat mask_whls_image;
     Mat gaussFeed;
     Mat canny_edges;
     vector<Vec4i> hough_lines;
@@ -96,9 +96,9 @@ void update_line(Mat img, int lowerXBound, int lowerYBound, Mat& line_img, vecto
     double rho = 1;
     double theta = pi / 180;
     // threshold is minimum number of intersections in a grid for candidate line to go to output
-    int thresholdHough = 100;
-    double min_line_len = 200;
-    double max_line_gap = 200;
+    int thresholdHough = 80;
+    double min_line_len = 50;
+    double max_line_gap = 50;
     HoughLinesP(canny_edges, hough_lines, rho, theta, thresholdHough, min_line_len, max_line_gap);
 
 
@@ -225,6 +225,7 @@ Java_com_melissarinch_ontrackdemoc_SourceClass_processImage(JNIEnv *env, jobject
 //int processImage(Mat matAddrRgba) {
 
 
+    Mat &mask = *(Mat*)mask_hl;
     Mat &cameraFeed = *(Mat*)mRgba;
     bool detectObjects = false;
 
@@ -252,8 +253,8 @@ Java_com_melissarinch_ontrackdemoc_SourceClass_processImage(JNIEnv *env, jobject
 
     if (!started || lanes.size() == 0 || true)
     {
-        Mat sub_img = cameraFeed(Range(cameraFeed.rows/2, cameraFeed.rows), Range(0, cameraFeed.cols));
-        update_line(sub_img, cameraFeed.rows/2, 0, line_img, lanes);
+        Mat sub_img = cameraFeed(Range(0, cameraFeed.rows), Range(0, cameraFeed.cols));
+        update_line(sub_img, 0, 0, line_img, lanes, mask);
     }
     else
     {
@@ -315,18 +316,18 @@ Java_com_melissarinch_ontrackdemoc_SourceClass_processImage(JNIEnv *env, jobject
             }
 
             Mat sub_img = cameraFeed(Range(line_img.rows/2, line_img.rows), Range(lowerBound, higherBound));
-            update_line(sub_img, lowerBound, line_img.rows/2, line_img, lanes);
+            update_line(sub_img, lowerBound, line_img.rows/2, line_img, lanes, mask);
 
         }
         if (!lookedAtLeftBound)
         {
             Mat sub_img = cameraFeed(Range(line_img.rows / 2, line_img.rows), Range(0, higherCheckBound));
-            update_line(sub_img, 0, line_img.rows / 2, line_img, lanes);
+            update_line(sub_img, 0, line_img.rows / 2, line_img, lanes, mask);
         }
         if (!lookedAtRightBound)
         {
             Mat sub_img = cameraFeed(Range(line_img.rows / 2, line_img.rows), Range(lowerCheckBound, line_img.cols));
-            update_line(sub_img, line_img.cols - searchRange, line_img.rows / 2, line_img, lanes);
+            update_line(sub_img, line_img.cols - searchRange, line_img.rows / 2, line_img, lanes, mask);
         }
     }
 
@@ -349,7 +350,7 @@ Java_com_melissarinch_ontrackdemoc_SourceClass_processImage(JNIEnv *env, jobject
     //Lane* l_lane = NULL;
     //Lane* r_lane = NULL;
 
-    double threshold = 150;
+    double threshold = 50;
 
     double distl = 1000000;
     double distr = -1000000;
