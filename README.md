@@ -1,5 +1,22 @@
 # OnTrak
 
+Going Left
+
+![Going Left](GoingLeft.gif)
+
+Going Right
+
+![Going Right](GoingRight.gif)
+
+Going Straight
+
+![Going Straight](GoingStraight.gif)
+
+Obstacle
+
+![Obstacle](Obstacle.gif)
+
+
 ## How to get it to work on your Android Studio
 
 In build.gradle for the app, add 
